@@ -58,9 +58,20 @@ def _lookup_service_brick_by_mod_name(mod_name):
 
 
 def register_app(app):
+    # print('app:',app)
+    #('app:', <ryu.controller.ofp_handler.OFPHandler object at 0x7f457f769410>)
     assert isinstance(app, RyuApp)
-    assert app.name not in SERVICE_BRICKS
+    # print('isinstance(app,RyuApp):',isinstance(app,RyuApp))
+    #('isinstance(app,RyuApp):', True)
+    # print('app.name:',app.name)
+    #('app.name:', 'ofp_event')
+    # print('server_bricks:',SERVICE_BRICKS)
+    #('server_bricks:', {})
+    # assert app.name not in SERVICE_BRICKS
+    # print('SERVICE_BRICKS:',SERVICE_BRICKS)
     SERVICE_BRICKS[app.name] = app
+    # print('SERVICE_BRICKS:', SERVICE_BRICKS)
+    #('SERVICE_BRICKS:', {'ofp_event': <ryu.controller.ofp_handler.OFPHandler object at 0x7f457f769410>})
     register_instance(app)
 
 
@@ -190,12 +201,29 @@ class RyuApp(object):
 
         Only AppManager.instantiate_apps should call this function.
         """
+        # print('main_thread:',self.main_thread)
+        #('main_thread:', None)
+        # print('thread:',thread)
+        #('thread:', <eventlet.greenthread.GreenThread object at 0x7f4f3540c190>)
         self.main_thread = thread
+        # print('main_thread:',self.main_thread)
+        #('main_thread:', <eventlet.greenthread.GreenThread object at 0x7f4f3540c190>)
 
     def register_handler(self, ev_cls, handler):
+        # print('ev_cls:',ev_cls)
+        #('ev_cls:', <class 'ryu.controller.ofp_event.EventOFPEchoReply'>)
+        # print('handler:',handler)
+        #('handler:', <bound method OFPHandler.echo_reply_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f21de7ce450>>)
         assert callable(handler)
+        # print('callable(handler)',callable(handler))
+        #('callable(handler)', True)
         self.event_handlers.setdefault(ev_cls, [])
+        # print('event_handlers:',self.event_handlers)
+        #('event_handlers:', {<class 'ryu.controller.ofp_event.EventOFPEchoReply'>: []})
         self.event_handlers[ev_cls].append(handler)
+        # print('event_handlers:', self.event_handlers)
+        #('event_handlers:', {<class 'ryu.controller.ofp_event.EventOFPEchoReply'>:
+                           #  [<bound method OFPHandler.echo_reply_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f21de7ce450>>]})
 
     def unregister_handler(self, ev_cls, handler):
         assert callable(handler)
@@ -237,7 +265,20 @@ class RyuApp(object):
                       The default is None.
         """
         ev_cls = ev.__class__
+        # print('ev.__class__:',ev.__class__)
+        # print('26:ev_cls:',ev_cls)
+        #('26:ev_cls:', <class 'ryu.controller.ofp_event.EventOFPHello'>)
+        #('26:ev_cls:', <class 'ryu.controller.ofp_event.EventOFPPortStatus'>)
+        #('26:ev_cls:', <class 'ryu.controller.ofp_event.EventOFPSwitchFeatures'>)
+        #('26:ev_cls:', <class 'ryu.controller.ofp_event.EventOFPPortDescStatsReply'>)
+        #....
         handlers = self.event_handlers.get(ev_cls, [])
+        # print('27:handlers:',handlers)
+        #('27:handlers:', [<bound method OFPHandler.hello_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f4f3537db50>>])
+        #('27:handlers:', [<bound method OFPHandler.port_status_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f4f3537db50>>])
+        #('27:handlers:', [<bound method OFPHandler.switch_features_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f4f3537db50>>])
+        #('27:handlers:', [<bound method OFPHandler.multipart_reply_handler of <ryu.controller.ofp_handler.OFPHandler object at 0x7f4f3537db50>>])
+
         if state is None:
             return handlers
 
@@ -251,6 +292,9 @@ class RyuApp(object):
                 # empty states means all states
                 return True
             return state in states
+
+        flitera = filter(test,handlers)
+        # print('28:flitera',flitera)
 
         return filter(test, handlers)
 
@@ -281,10 +325,14 @@ class RyuApp(object):
     def _event_loop(self):
         while self.is_active or not self.events.empty():
             ev, state = self.events.get()
+            # print('25:ev,state,is_active,events.empty():',ev,state,self.is_active,self.events.empty())
+
             self._events_sem.release()
             if ev == self._event_stop:
                 continue
             handlers = self.get_handlers(ev, state)
+            # print('29:handlers:',handlers)
+
             for handler in handlers:
                 try:
                     handler(ev)
@@ -390,12 +438,18 @@ class AppManager(object):
 
     def load_app(self, name):
         mod = utils.import_module(name)
+        # print('6:mod:',mod)   #('6:mod:', <module 'ryu.controller.ofp_handler'
+                              # from '/usr/local/lib/python2.7/dist-packages/ryu/controller/ofp_handler.pyc'>)
+
         clses = inspect.getmembers(mod,
                                    lambda cls: (inspect.isclass(cls) and
                                                 issubclass(cls, RyuApp) and
                                                 mod.__name__ ==
                                                 cls.__module__))
         if clses:
+            # print('7:clses:',clses)    #('7:clses:', [('OFPHandler', <class 'ryu.controller.ofp_handler.OFPHandler'>)])
+            # print('8:clses[0][1]',clses[0][1])  #('8:clses[0][1]', <class 'ryu.controller.ofp_handler.OFPHandler'>)
+
             return clses[0][1]
         return None
 
@@ -403,10 +457,16 @@ class AppManager(object):
         app_lists = [app for app
                      in itertools.chain.from_iterable(app.split(',')
                                                       for app in app_lists)]
+        # print('3:app_lists:',app_lists)   #('3:app_lists:', ['ryu.controller.ofp_handler'])
+
         while len(app_lists) > 0:
             app_cls_name = app_lists.pop(0)
+            # print('4:app_cls_name:',app_cls_name)  #('4:app_cls_name:', 'ryu.controller.ofp_handler')
 
             context_modules = [x.__module__ for x in self.contexts_cls.values()]
+
+            # print('5:context_modules:',context_modules)  #('5:context_modules:', [])
+
             if app_cls_name in context_modules:
                 continue
 
@@ -417,14 +477,24 @@ class AppManager(object):
                 continue
 
             self.applications_cls[app_cls_name] = cls
+            # print('9:app_cls_name,cls',app_cls_name,cls)  #('9:app_cls_name,cls', 'ryu.controller.ofp_handler',
+                                                          # <class 'ryu.controller.ofp_handler.OFPHandler'>)
 
             services = []
+            # print('10:cls.context_iteritems()',cls.context_iteritems(),services)
+            #('10:cls.context_iteritems()', <listiterator object at 0x7ff3d4484a50>, [])
+
             for key, context_cls in cls.context_iteritems():
                 v = self.contexts_cls.setdefault(key, context_cls)
+                # print('11:v',v)
+                # print('12:key',key)
+                # print('13:context_cls',context_cls)
+
                 assert v == context_cls
                 context_modules.append(context_cls.__module__)
 
                 if issubclass(context_cls, RyuApp):
+                    #get context_cls dependent server and append services
                     services.extend(get_dependent_services(context_cls))
 
             # we can't load an app that will be initiataed for
@@ -432,12 +502,18 @@ class AppManager(object):
             for i in get_dependent_services(cls):
                 if i not in context_modules:
                     services.append(i)
+            # print('14:services:',services)  #('14:services:', [])
+
             if services:
                 app_lists.extend([s for s in set(services)
                                   if s not in app_lists])
+                # print('15:app_lists:',app_lists)
+        # print('16:app_lists:',app_lists)    #('16:app_lists:', [])
 
     def create_contexts(self):
         for key, cls in self.contexts_cls.items():
+            # print('18:self.contexts_cls:',self.contexts_cls,self.contexts_cls.items())
+
             if issubclass(cls, RyuApp):
                 # hack for dpset
                 context = self._instantiate(None, cls)
@@ -446,6 +522,8 @@ class AppManager(object):
             LOG.info('creating context %s', key)
             assert key not in self.contexts
             self.contexts[key] = context
+        # print('21:self.contexts:',self.contexts)  #('21:self.contexts:', {})
+
         return self.contexts
 
     def _update_bricks(self):
@@ -487,15 +565,31 @@ class AppManager(object):
         # Yes, maybe for slicing.
         LOG.info('instantiating app %s of %s', app_name, cls.__name__)
 
+        #('23:applications_cls', {'ryu.controller.ofp_handler': <class 'ryu.controller.ofp_handler.OFPHandler'>})
+
+        # print('hasattr(cls,OFP_VERSIONS):',hasattr(cls,'OFP_VERSIONS'))
+        #('hasattr(cls,OFP_VERSIONS):', True)
+        # print('cls.OFP_VERSIONS:',cls.OFP_VERSIONS)
+        #('cls.OFP_VERSIONS:', None)
         if hasattr(cls, 'OFP_VERSIONS') and cls.OFP_VERSIONS is not None:
             ofproto_protocol.set_app_supported_versions(cls.OFP_VERSIONS)
 
         if app_name is not None:
             assert app_name not in self.applications
         app = cls(*args, **kwargs)
+        # print('19:app',app)
+        #instantiate_apps add ('19:app', <ryu.controller.ofp_handler.OFPHandler object at 0x7ff3ce92f310>)
         register_app(app)
-        assert app.name not in self.applications
+        # print('applications:',self.applications)
+        #('applications:', {})
+        # assert app.name not in self.applications
+        # print('app_name:',app_name)
+        #('app_name:', 'ryu.controller.ofp_handler')
+        # print('cls:',cls)
+        #('cls:', <class 'ryu.controller.ofp_handler.OFPHandler'>)
         self.applications[app.name] = app
+        # print('20:applications',self.applications)
+        #instantiate_apps add ('20:applications', {'ofp_event': <ryu.controller.ofp_handler.OFPHandler object at 0x7ff3ce92f310>})
         return app
 
     def instantiate(self, cls, *args, **kwargs):
@@ -505,6 +599,9 @@ class AppManager(object):
         return app
 
     def instantiate_apps(self, *args, **kwargs):
+        # print('23:applications_cls',self.applications_cls)
+        #('23:applications_cls', {'ryu.controller.ofp_handler': <class 'ryu.controller.ofp_handler.OFPHandler'>})
+
         for app_name, cls in self.applications_cls.items():
             self._instantiate(app_name, cls, *args, **kwargs)
 
@@ -513,10 +610,18 @@ class AppManager(object):
 
         threads = []
         for app in self.applications.values():
+            # print('24:app:',app)
+            #('24:app:', <ryu.controller.ofp_handler.OFPHandler object at 0x7ff3ce92f310>)
             t = app.start()
+            # print('30:t:',t)
+            #('30:t:', <eventlet.greenthread.GreenThread object at 0x7ff3ce9ba050>)
+
             if t is not None:
                 app.set_main_thread(t)
                 threads.append(t)
+        # print('31:threads:',threads)
+        #('31:threads:', [<eventlet.greenthread.GreenThread object at 0x7ff3ce9ba050>])
+
         return threads
 
     @staticmethod

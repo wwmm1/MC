@@ -84,8 +84,12 @@ def set_ev_cls(ev_cls, dispatchers=None):
 
 
 def set_ev_handler(ev_cls, dispatchers=None):
+    # print('ev_cls"',ev_cls)
+    # print('dispatchers:',dispatchers)
     def _set_ev_cls_dec(handler):
+        # print('handler:',handler)
         if 'callers' not in dir(handler):
+            # print('dir(handler):',dir(handler))
             handler.callers = {}
         for e in _listify(ev_cls):
             handler.callers[e] = _Caller(_listify(dispatchers), None)
@@ -102,16 +106,28 @@ def _listify(may_list):
         may_list = []
     if not isinstance(may_list, list):
         may_list = [may_list]
+    # print('may_list11：',may_list)
     return may_list
 
 
 def register_instance(i):
+
     for _k, m in inspect.getmembers(i, inspect.ismethod):
+        # print('inspect.getmember(i,inspect.ismethod):', inspect.getmembers(i, inspect.ismethod))
+        # print('i:',i)
+        #('i:', <ryu.controller.ofp_handler.OFPHandler object at 0x7f457f769410>)
+        # print('_k:',_k)
+        #('_k:', '__init__')    first method name
+        # print('m',m)
+        #('m', <bound method OFPHandler.__init__ of <ryu.controller.ofp_handler.OFPHandler object at 0x7f457f769410>>)  first method
         # LOG.debug('instance %s k %s m %s', i, _k, m)
         if _has_caller(m):
             for ev_cls, c in m.callers.items():
+                # print('ev_cls',ev_cls)
+                #('ev_cls', <class 'ryu.controller.ofp_event.EventOFPEchoReply'>)
+                # print('c',c)
+                #('c', <ryu.controller.handler._Caller object at 0x7f71823cb910>)
                 i.register_handler(ev_cls, m)
-
 
 def _is_method(f):
     return inspect.isfunction(f) or inspect.ismethod(f)

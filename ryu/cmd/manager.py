@@ -90,15 +90,21 @@ def main(args=None, prog=None):
             pid_file.write(str(os.getpid()))
 
     app_lists = CONF.app_lists + CONF.app
+    # print('1:app_lists:',app_lists)    #('1:app_lists:', [])
     # keep old behavior, run ofp if no application is specified.
     if not app_lists:
         app_lists = ['ryu.controller.ofp_handler']
 
     app_mgr = AppManager.get_instance()
+    # print('2:app_mgr',app_mgr)     #('2:app_mgr', <ryu.base.app_manager.AppManager object at 0x7ff3ce974450>)
     app_mgr.load_apps(app_lists)
+    # print('17:app_lists:',app_lists)   #('17:app_lists:', ['ryu.controller.ofp_handler'])
     contexts = app_mgr.create_contexts()
+    # print('22:contexts',contexts)   #('22:contexts', {})
     services = []
     services.extend(app_mgr.instantiate_apps(**contexts))
+    # print('services:',services)
+    #('services:', [<eventlet.greenthread.GreenThread object at 0x7f4f3540c190>])
 
     webapp = wsgi.start_service(app_mgr)
     if webapp:
