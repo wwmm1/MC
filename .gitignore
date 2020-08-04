@@ -15,3 +15,10 @@ GSYMS
 covhtml/
 coverage.xml
 nosetests.xml
+/ryu/base/
+/ryu/cmd/
+/ryu/controller/
+/ryu/base/app_manager.py
+/ryu/cmd/manager.py
+/ryu/controller/handler.py
+/ryu/controller/ofp_handler.py
