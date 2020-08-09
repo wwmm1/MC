@@ -78,7 +78,7 @@ class myShortForwarding(app_manager.RyuApp):
         self.network.add_nodes_from(switches)
 
         link_list = get_link(self.topology_api_app,None)
-        links = [(link.src.dpid,link.dst.dpid,{"attr_dict":{'port':link.dst.port_no}}) for link in link_list]
+        links = [(link.src.dpid,link.dst.dpid,{"attr_dict":{'port':link.src.port_no}}) for link in link_list]
         self.network.add_edges_from(links)
 
         links = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
@@ -104,6 +104,8 @@ class myShortForwarding(app_manager.RyuApp):
             next_hop = path[path.index(dpid)+1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
             print(path)
+            print(out_port)
+            print(next_hop)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port

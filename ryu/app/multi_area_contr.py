@@ -9,6 +9,7 @@ from ryu.topology import event
 from ryu.topology.api import get_switch,get_link,get_host
 import zookeeper_server
 import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class Mutlti_Area_Contr(app_manager.RyuApp):
@@ -20,6 +21,7 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
         self.mac_to_port = {}
         self.topology_api_app = self
         self.network = nx.DiGraph()
+        self.paths = {}
 
 
     #switch features
@@ -60,90 +62,156 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        in_port = msg.match['in_port']
 
-        dpid = datapath.id
-        #dpid:{mac:port}
-        self.mac_to_port.setdefault(dpid,{})
+        in_port = msg.match['in_port']
+        # dpid = datapath.id
 
         pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocols(ethernet.ethernet)[0]
-        #lldp packet
-        lldp_packet = ether_types.ETH_TYPE_LLDP
+        eth_pkt = pkt.get_protocol(ethernet.ethernet)
+        src = eth_pkt.src
+        dst = eth_pkt.dst
 
-        dst = eth.dst  #destination mac
-        src = eth.src  #srouce mac
-
-        self.mac_to_port[dpid][src] = in_port
-
-        if dst in self.mac_to_port[dpid]:
-            out_port = self.mac_to_port[dpid][dst]
-        else:
-            out_port = ofproto.OFPP_FLOOD
+        out_port = self.get_out_port(datapath,src,dst,in_port)
 
         actions = [parser.OFPActionOutput(out_port)]
 
         if out_port != ofproto.OFPP_FLOOD:
-            match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_src=src)
-
-            if msg.buffer_id != ofproto.OFPCML_NO_BUFFER:
-                self.add_flow(datapath,1,match,actions,msg.buffer_id)
-                return
-            else:
-                self.add_flow(datapath,1,match,actions)
-
-        data = None
-        if msg.buffer_id == ofproto.OFPCML_NO_BUFFER:
-            data = msg.data
+            match = parser.OFPMatch(in_port = in_port,eth_dst = dst)
+            self.add_flow(datapath,1,match,actions)
 
         out = parser.OFPPacketOut(datapath=datapath,buffer_id=msg.buffer_id,
-                                  in_port=in_port,actions=actions,data=data)
+                                  in_port=in_port,actions=actions,data=msg.data)
+
         datapath.send_msg(out)
 
+
+        # msg = ev.msg
+        # datapath = msg.datapath
+        # ofproto = datapath.ofproto
+        # parser = datapath.ofproto_parser
+        # in_port = msg.match['in_port']
+        #
+        # dpid = datapath.id
+        # #dpid:{mac:port}
+        # self.mac_to_port.setdefault(dpid,{})
+        #
+        # pkt = packet.Packet(msg.data)
+        # eth = pkt.get_protocols(ethernet.ethernet)[0]
+        # #lldp packet
+        # lldp_packet = ether_types.ETH_TYPE_LLDP
+        #
+        # dst = eth.dst  #destination mac
+        # src = eth.src  #srouce mac
+        #
+        # self.mac_to_port[dpid][src] = in_port
+        #
+        # if dst in self.mac_to_port[dpid]:
+        #     out_port = self.mac_to_port[dpid][dst]
+        # else:
+        #     out_port = ofproto.OFPP_FLOOD
+        #
+        # actions = [parser.OFPActionOutput(out_port)]
+        #
+        # if out_port != ofproto.OFPP_FLOOD:
+        #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_src=src)
+        #
+        #     if msg.buffer_id != ofproto.OFPCML_NO_BUFFER:
+        #         self.add_flow(datapath,1,match,actions,msg.buffer_id)
+        #         return
+        #     else:
+        #         self.add_flow(datapath,1,match,actions)
+        #
+        # data = None
+        # if msg.buffer_id == ofproto.OFPCML_NO_BUFFER:
+        #     data = msg.data
+        #
+        # out = parser.OFPPacketOut(datapath=datapath,buffer_id=msg.buffer_id,
+        #                           in_port=in_port,actions=actions,data=data)
+        # datapath.send_msg(out)
+
     #get all switch info and all links
-    @set_ev_cls([event.EventSwitchEnter,event.EventSwitchLeave,
-                 event.EventPortAdd,event.EventPortDelete,
-                 event.EventPortModify,event.EventLinkAdd,event.EventLinkDelete],
-                [CONFIG_DISPATCHER,MAIN_DISPATCHER])
+    # @set_ev_cls([event.EventSwitchEnter,event.EventSwitchLeave,
+    #              event.EventPortAdd,event.EventPortDelete,
+    #              event.EventPortModify,event.EventLinkAdd,event.EventLinkDelete],
+    #             [CONFIG_DISPATCHER,MAIN_DISPATCHER])
+    @set_ev_cls([event.EventSwitchEnter],[CONFIG_DISPATCHER,MAIN_DISPATCHER])
     def get_topology(self,ev):
-        print(dir(ev.link.dst.port_no))
-        #get switch(dpid)
         switch_list = get_switch(self.topology_api_app,None)
-        switches = [switch.dp.id for switch in switch_list]     #switches
-        # switch = ev.switch.dp.id           #switch dpid
-        # print(ev.switch.dp.id)
+        switches = [switch.dp.id for switch in switch_list]
         self.network.add_nodes_from(switches)
 
-        #get src links
         link_list = get_link(self.topology_api_app,None)
-        # srclinks = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no,'srcmac':link.src.hw_addr}})
-        #             for link in link_list]
+        #src to dst links
         srclinks = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no}})
                     for link in link_list]
-        # aa = [link.dst.hw_addr for link in link_list]
-        # print('srclinks:',srclinks)
         self.network.add_edges_from(srclinks)
 
-        #reverse links
+        #dst to src links
         dstlinks = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
                     for link in link_list]
-        # print('dst_links:',dstlinks)
         self.network.add_edges_from(dstlinks)
 
-        #get host
-        hosts_list = get_host(self.topology_api_app)
-        hosts = [(host.port.dpid,host.port.port_no,{'attr_dict':{'ip':host.ipv4,'mac':host.mac}})
-                for host in hosts_list]
-
-        if type(ev) == event.EventSwitchLeave:
-            print('swleave:',ev)
-        if type(ev) == event.EventLinkDelete:
-            print('linkdel:',ev)
-        if type(ev) == event.EventLinkAdd:
-            print('linkadd:',ev.link.dst.port_no)
+        # print(dir(ev.link.dst.port_no))
+        # #get switch(dpid)
+        # switch_list = get_switch(self.topology_api_app,None)
+        # switches = [switch.dp.id for switch in switch_list]     #switches
+        # # switch = ev.switch.dp.id           #switch dpid
+        # # print(ev.switch.dp.id)
+        # self.network.add_nodes_from(switches)
+        #
+        # #get src links
+        # link_list = get_link(self.topology_api_app,None)
+        # # srclinks = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no,'srcmac':link.src.hw_addr}})
+        # #             for link in link_list]
+        # srclinks = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no}})
+        #             for link in link_list]
+        # # aa = [link.dst.hw_addr for link in link_list]
+        # # print('srclinks:',srclinks)
+        # self.network.add_edges_from(srclinks)
+        #
+        # #reverse links
+        # dstlinks = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
+        #             for link in link_list]
+        # # print('dst_links:',dstlinks)
+        # self.network.add_edges_from(dstlinks)
+        #
+        # #get host
+        # hosts_list = get_host(self.topology_api_app)
+        # hosts = [(host.port.dpid,host.port.port_no,{'attr_dict':{'ip':host.ipv4,'mac':host.mac}})
+        #         for host in hosts_list]
+        #
+        # if type(ev) == event.EventSwitchLeave:
+        #     print('swleave:',ev)
+        # if type(ev) == event.EventLinkDelete:
+        #     print('linkdel:',ev)
+        # if type(ev) == event.EventLinkAdd:
+        #     print('linkadd:',ev.link.dst.port_no)
 
         # get all switches,links,hosts
         # add_switch_inf_to_ZkServer(switches,srclinks,hosts)
+
+    def get_out_port(self,datapath,src,dst,in_port):
+        dpid = datapath.id
+
+        if src not in self.network:
+            self.network.add_node(src)
+            self.network.add_edge(dpid, src, attr_dict={'port': in_port})
+            self.network.add_edge(src, dpid)
+            self.paths.setdefault(src, {})
+
+        if dst in self.network:
+            if dst not in self.paths[src]:
+                path = nx.shortest_path(self.network, src, dst)     #algorithm shorst path
+                self.paths[src][dst] = path
+
+            path = self.paths[src][dst]
+            next_hop = path[path.index(dpid) + 1]
+            out_port = self.network[dpid][next_hop]['attr_dict']['port']
+            print(path)
+        else:
+            out_port = datapath.ofproto.OFPP_FLOOD
+        return out_port
+
 
 # add switch information to zk_server
 def add_switch_inf_to_ZkServer(switches,srclinks,hosts=None):
