@@ -20,7 +20,7 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
         super(Mutlti_Area_Contr,self).__init__(*args,**kwargs)
         self.mac_to_port = {}
         self.topology_api_app = self
-        self.network = nx.DiGraph()
+        self.network = nx.Graph()
         self.paths = {}
 
 
@@ -205,9 +205,11 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
+            p1 = nx.all_shortest_paths(self.network,source='00:00:00:00:00:01',target='00:00:00:00:00:03')
             next_hop = path[path.index(dpid) + 1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            print(path)
+            print([p for p in p1])
+            print(dpid)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
