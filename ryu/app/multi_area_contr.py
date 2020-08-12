@@ -18,7 +18,7 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
 
     def __init__(self,*args,**kwargs):
         super(Mutlti_Area_Contr,self).__init__(*args,**kwargs)
-        self.mac_to_port = {}
+        # self.mac_to_port = {}
         self.topology_api_app = self
         self.network = nx.Graph()
         self.paths = {}
@@ -68,6 +68,7 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
 
         pkt = packet.Packet(msg.data)
         eth_pkt = pkt.get_protocol(ethernet.ethernet)
+
         src = eth_pkt.src
         dst = eth_pkt.dst
 
@@ -141,15 +142,13 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
         self.network.add_nodes_from(switches)
 
         link_list = get_link(self.topology_api_app,None)
-        #src to dst links
-        srclinks = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no}})
-                    for link in link_list]
-        self.network.add_edges_from(srclinks)
+        links = [(link.src.dpid,link.dst.dpid,{"attr_dict":{'port':link.src.port_no}}) for link in link_list]
+        self.network.add_edges_from(links)
 
         #dst to src links
-        dstlinks = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
+        links = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
                     for link in link_list]
-        self.network.add_edges_from(dstlinks)
+        self.network.add_edges_from(links)
 
         # print(dir(ev.link.dst.port_no))
         # #get switch(dpid)
@@ -205,10 +204,10 @@ class Mutlti_Area_Contr(app_manager.RyuApp):
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
-            p1 = nx.all_shortest_paths(self.network,source='00:00:00:00:00:01',target='00:00:00:00:00:03')
+            # p1 = nx.all_shortest_paths(self.network,source='00:00:00:00:00:01',target='00:00:00:00:00:03')
             next_hop = path[path.index(dpid) + 1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            print([p for p in p1])
+            # print([p for p in p1])
             print(dpid)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
