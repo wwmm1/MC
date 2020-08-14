@@ -9,7 +9,8 @@ from ryu.topology.api import get_switch,get_link
 import networkx as nx
 import zookeeper_server
 
-ARP = arp.arp.__name__
+
+# ARP = arp.arp.__name__
 
 class myShortForwarding(app_manager.RyuApp):
 
@@ -21,7 +22,7 @@ class myShortForwarding(app_manager.RyuApp):
         self.network = nx.DiGraph()
         self.paths = {}
         self.topology_api_app = self
-        self.arp_table = {}
+        # self.arp_table = {}
 
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures,CONFIG_DISPATCHER)
@@ -62,12 +63,12 @@ class myShortForwarding(app_manager.RyuApp):
         eth_src = eth_pkt.src
         eth_dst = eth_pkt.dst
 
-        header_list = dict(
-            (p.protocol_name, p) for p in pkt.protocols if type(p) != str)
-        if ARP in header_list:
-            self.arp_table[header_list[ARP].src_ip] = eth_src  # ARP learning
-            print(self.arp_table)
-        print(header_list)
+        # header_list = dict(
+        #     (p.protocol_name, p) for p in pkt.protocols if type(p) != str)
+        # if ARP in header_list:
+        #     self.arp_table[header_list[ARP].src_ip] = eth_src  # ARP learning
+        #     print(self.arp_table)
+        # print(header_list)
 
 
         out_port = self.get_out_port(datapath,eth_src,eth_dst,in_port)
@@ -114,6 +115,7 @@ class myShortForwarding(app_manager.RyuApp):
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid)+1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
+            print(path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
