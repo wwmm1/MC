@@ -10,7 +10,9 @@ import networkx as nx
 import zookeeper_server
 
 
-# ARP = arp.arp.__name__
+ARP = arp.arp.__name__
+ETHERNET = ethernet.ethernet.__name__
+ETHERNET_MULTICAST = 'ff:ff:ff:ff:ff:ff'
 
 class myShortForwarding(app_manager.RyuApp):
 
@@ -22,8 +24,9 @@ class myShortForwarding(app_manager.RyuApp):
         self.network = nx.DiGraph()
         self.paths = {}
         self.topology_api_app = self
-        # self.arp_table = {}
-
+        self.arp_table = {}
+        self.sw = {}
+        self.avoid_port = {}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures,CONFIG_DISPATCHER)
     def switch_feature_handler(self,ev):
@@ -63,15 +66,13 @@ class myShortForwarding(app_manager.RyuApp):
         eth_src = eth_pkt.src
         eth_dst = eth_pkt.dst
 
-        # header_list = dict(
-        #     (p.protocol_name, p) for p in pkt.protocols if type(p) != str)
-        # if ARP in header_list:
-        #     self.arp_table[header_list[ARP].src_ip] = eth_src  # ARP learning
-        #     print(self.arp_table)
-        # print(header_list)
+        header_list = dict(
+            (p.protocol_name, p) for p in pkt.protocols if type(p) != str)
 
-
-        out_port = self.get_out_port(datapath,eth_src,eth_dst,in_port)
+        if self.arp_in_packet(header_list,datapath,in_port):
+            return None
+        else:
+            out_port = self.get_out_port(datapath,eth_src,eth_dst,in_port)
 
         actions = [ofp_parser.OFPActionOutput(out_port)]
 
@@ -98,6 +99,8 @@ class myShortForwarding(app_manager.RyuApp):
                  for link in link_list]
         self.network.add_edges_from(links)
 
+        # print(links)
+
     def get_out_port(self,datapath,src,dst,in_port):
         dpid = datapath.id
 
@@ -111,14 +114,40 @@ class myShortForwarding(app_manager.RyuApp):
             if dst not in self.paths[src]:
                 path = nx.shortest_path(self.network,src,dst)
                 self.paths[src][dst] = path
+                # print(path)
 
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid)+1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            print(path)
+            print('port:',out_port)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
+
+    #get arp in packet
+    def arp_in_packet(self,header_list,datapath,in_port):
+        header_list = header_list
+        datapath = datapath
+        in_port = in_port
+
+        if ETHERNET in header_list:
+            eth_dst = header_list[ETHERNET].dst
+            eth_src = header_list[ETHERNET].src
+
+        if eth_dst == ETHERNET_MULTICAST and ARP in header_list:
+            arp_dst_ip = header_list[ARP].dst_ip
+            if(datapath.id,eth_src,arp_dst_ip) in self.sw:
+                if self.sw[(datapath.id,eth_src,arp_dst_ip)] != in_port:
+                    self.avoid_port.setdefault(datapath.id,[]).append(in_port)
+                    print(self.avoid_port)
+                    # if in_port not in list(self.avoid_port[datapath.id]):
+                    #     # self.avoid_port[datapath.id] = in_port
+                    #     self.avoid_port.setdefault(datapath.id,[]).append(in_port)
+                    #     print(self.avoid_port[datapath.id])
+                    return True
+            else:
+                self.sw[(datapath.id,eth_src,arp_dst_ip)] = in_port
+                return False
 
 # add switch information to zk_server
 def add_switch_inf_to_ZkServer(switches,srclinks,hosts=None):

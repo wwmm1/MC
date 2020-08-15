@@ -50,7 +50,7 @@ class ARP_PROXY_13(app_manager.RyuApp):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        in_port = msg.data['in_port']
+        in_port = msg.match['in_port']
 
         pkt = packet.Packet(msg.data)
 
@@ -63,21 +63,22 @@ class ARP_PROXY_13(app_manager.RyuApp):
                            for p in pkt.protocols if type(p) != str)
         if ARP in header_list:
             self.arp_table[header_list[ARP].src_ip] = src
+            # print(ARP)
+            # print(self.arp_table)
 
         self.mac_to_port.setdefault(dpid,{})
 
-        self.logger.info('packet in %s %s %s %s',dpid,src,dst,in_port)
+        # self.logger.info('packet in %s %s %s %s',dpid,src,dst,in_port)
 
         if dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][dst]
         else:
-            if self.arp_handler(header_list,datapath,in_port,
-                                msg.buffer_id):
-                print('ARP_PROXY_13')
+            if self.arp_handler(header_list,datapath,in_port,msg.buffer_id):
+                # print('ARP_PROXY_13')
                 return None
             else:
                 out_port = ofproto.OFPP_FLOOD
-                print('OFPP_FLOOD')
+                # print('OFPP_FLOOD')
         actions = [parser.OFPActionOutput(out_port)]
 
         if out_port != ofproto.OFPP_FLOOD:
@@ -135,17 +136,15 @@ class ARP_PROXY_13(app_manager.RyuApp):
 
                     ARP_Reply = packet.Packet()
                     ARP_Reply.add_protocol(ethernet.ethernet(
-                        ethernet=header_list[ETHERNET].ethertype,
+                        ethertype=header_list[ETHERNET].ethertype,
                         dst= eth_src,
-                        src=self.arp_table[arp_dst_ip]
-                    ))
+                        src=self.arp_table[arp_dst_ip]))
                     ARP_Reply.add_protocol(arp.arp(
                         opcode=arp.ARP_REPLY,
                         src_mac=self.arp_table[arp_dst_ip],
                         src_ip=arp_dst_ip,
                         dst_mac=eth_src,
-                        dst_ip=arp_src_ip
-                    ))
+                        dst_ip=arp_src_ip))
 
                     ARP_Reply.serialize()
 
