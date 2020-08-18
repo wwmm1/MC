@@ -92,7 +92,8 @@ class myShortForwarding(app_manager.RyuApp):
         self.network.add_nodes_from(switches)
 
         link_list = get_link(self.topology_api_app,None)
-        links = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no}}) for link in link_list]
+        links = [(link.src.dpid,link.dst.dpid,{'attr_dict':{'port':link.src.port_no}})
+                 for link in link_list]
         self.network.add_edges_from(links)
 
         links = [(link.dst.dpid,link.src.dpid,{'attr_dict':{'port':link.dst.port_no}})
@@ -110,6 +111,13 @@ class myShortForwarding(app_manager.RyuApp):
             self.network.add_edge(src,dpid)
             self.paths.setdefault(src,{})
 
+        # if dpid in self.avoid_port:
+        #     print(self.avoid_port[dpid])
+
+        # for edgs in self.network.edges(data=True):
+        #     print(edgs)
+        print(self.network[1][3]['attr_dict']['port'])
+
         if dst in self.network:
             if dst not in self.paths[src]:
                 path = nx.shortest_path(self.network,src,dst)
@@ -119,7 +127,10 @@ class myShortForwarding(app_manager.RyuApp):
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid)+1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            print('port:',out_port)
+            # if dpid in self.avoid_port:
+            #     if port not in self.avoid_port[dpid]:
+            #         out_port = self.network[dpid][next_hop]['attr_id']['port']
+            #
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
@@ -139,12 +150,7 @@ class myShortForwarding(app_manager.RyuApp):
             if(datapath.id,eth_src,arp_dst_ip) in self.sw:
                 if self.sw[(datapath.id,eth_src,arp_dst_ip)] != in_port:
                     self.avoid_port.setdefault(datapath.id,[]).append(in_port)
-                    print(self.avoid_port)
-                    # if in_port not in list(self.avoid_port[datapath.id]):
-                    #     # self.avoid_port[datapath.id] = in_port
-                    #     self.avoid_port.setdefault(datapath.id,[]).append(in_port)
-                    #     print(self.avoid_port[datapath.id])
-                    return True
+                return True
             else:
                 self.sw[(datapath.id,eth_src,arp_dst_ip)] = in_port
                 return False
