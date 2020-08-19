@@ -33,7 +33,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.stp = kwargs['stplib']
-        self.avoid = {}
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.

@@ -3,20 +3,20 @@ from ryu.controller import ofp_event
 from ryu.ofproto import ofproto_v1_3
 from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import CONFIG_DISPATCHER,MAIN_DISPATCHER
-from ryu.lib.packet import packet,ethernet,arp
+from ryu.lib.packet import packet,ethernet,ether_types
 from ryu.topology import event
 from ryu.topology.api import get_switch,get_link
+
+from ryu.lib import dpid as dpid_lib
+from ryu.lib import stplib
+
 import networkx as nx
 import zookeeper_server
-
-
-ARP = arp.arp.__name__
-ETHERNET = ethernet.ethernet.__name__
-ETHERNET_MULTICAST = 'ff:ff:ff:ff:ff:ff'
 
 class myShortForwarding(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
+    _CONTEXTS = {'stplib':stplib.Stp}
 
     def __init__(self,*args,**kwargs):
         super(myShortForwarding,self).__init__(*args,**kwargs)
@@ -24,9 +24,29 @@ class myShortForwarding(app_manager.RyuApp):
         self.network = nx.DiGraph()
         self.paths = {}
         self.topology_api_app = self
-        self.arp_table = {}
-        self.sw = {}
-        self.avoid_port = {}
+
+        self.mac_to_port = {}
+        self.stp = kwargs['stplib']
+
+        config = {dpid_lib.str_to_dpid('0000000000000001'):
+                      {'bridge': {'priority': 0x8000}},
+                  dpid_lib.str_to_dpid('0000000000000002'):
+                      {'bridge': {'priority': 0x9000}},
+                  dpid_lib.str_to_dpid('0000000000000003'):
+                      {'bridge': {'priority': 0xa000}}}
+        self.stp.set_config(config)
+
+    def delete_flow(self, datapath):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        for dst in self.mac_to_port[datapath.id].keys():
+            match = parser.OFPMatch(eth_dst=dst)
+            mod = parser.OFPFlowMod(
+                datapath, command=ofproto.OFPFC_DELETE,
+                out_port=ofproto.OFPP_ANY, out_group=ofproto.OFPG_ANY,
+                priority=1, match=match)
+            datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures,CONFIG_DISPATCHER)
     def switch_feature_handler(self,ev):
@@ -66,13 +86,18 @@ class myShortForwarding(app_manager.RyuApp):
         eth_src = eth_pkt.src
         eth_dst = eth_pkt.dst
 
-        header_list = dict(
-            (p.protocol_name, p) for p in pkt.protocols if type(p) != str)
+        # if eth_pkt.ethertype == ether_types.ETH_TYPE_LLDP:
+        #     return
 
-        if self.arp_in_packet(header_list,datapath,in_port):
-            return None
+        self.mac_to_port.setdefault(dpid, {})
+
+        self.mac_to_port[dpid][eth_src] = in_port
+
+        if eth_dst in self.mac_to_port[dpid]:
+            # out_port = self.get_out_port(datapath,eth_src,eth_dst,in_port)
+            out_port = self.mac_to_port[dpid][eth_dst]
         else:
-            out_port = self.get_out_port(datapath,eth_src,eth_dst,in_port)
+            out_port = ofproto.OFPP_FLOOD
 
         actions = [ofp_parser.OFPActionOutput(out_port)]
 
@@ -84,6 +109,28 @@ class myShortForwarding(app_manager.RyuApp):
                                     in_port=in_port,actions=actions,data=msg.data)
 
         datapath.send_msg(out)
+
+    @set_ev_cls(stplib.EventTopologyChange,MAIN_DISPATCHER)
+    def _topology_change_handler(self, ev):
+        dp = ev.dp
+        dpid_str = dpid_lib.dpid_to_str(dp.id)
+        msg = 'Receive topology change event. Flush MAC table.'
+        self.logger.debug("[dpid=%s] %s", dpid_str, msg)
+
+        if dp.id in self.mac_to_port:
+            self.delete_flow(dp)
+            del self.mac_to_port[dp.id]
+
+    @set_ev_cls(stplib.EventPortStateChange,MAIN_DISPATCHER)
+    def _port_state_change_handler(self, ev):
+        dpid_str = dpid_lib.dpid_to_str(ev.dp.id)
+        of_state = {stplib.PORT_STATE_DISABLE: 'DISABLE',
+                    stplib.PORT_STATE_BLOCK: 'BLOCK',
+                    stplib.PORT_STATE_LISTEN: 'LISTEN',
+                    stplib.PORT_STATE_LEARN: 'LEARN',
+                    stplib.PORT_STATE_FORWARD: 'FORWARD'}
+        self.logger.debug("[dpid=%s][port=%d] state=%s",
+                          dpid_str, ev.port_no, of_state[ev.port_state])
 
     @set_ev_cls(event.EventSwitchEnter,[CONFIG_DISPATCHER,MAIN_DISPATCHER])
     def get_topology(self,ev):
@@ -111,11 +158,6 @@ class myShortForwarding(app_manager.RyuApp):
             self.network.add_edge(src,dpid)
             self.paths.setdefault(src,{})
 
-        # if dpid in self.avoid_port:
-        #     print(self.avoid_port[dpid])
-
-        # for edgs in self.network.edges(data=True):
-        #     print(edgs)
         print(self.network[1][3]['attr_dict']['port'])
 
         if dst in self.network:
@@ -127,49 +169,13 @@ class myShortForwarding(app_manager.RyuApp):
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid)+1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            # if dpid in self.avoid_port:
-            #     if port not in self.avoid_port[dpid]:
-            #         out_port = self.network[dpid][next_hop]['attr_id']['port']
-            #
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
 
-    #get arp in packet
-    def arp_in_packet(self,header_list,datapath,in_port):
-        header_list = header_list
-        datapath = datapath
-        in_port = in_port
-
-        if ETHERNET in header_list:
-            eth_dst = header_list[ETHERNET].dst
-            eth_src = header_list[ETHERNET].src
-
-        if eth_dst == ETHERNET_MULTICAST and ARP in header_list:
-            arp_dst_ip = header_list[ARP].dst_ip
-            if(datapath.id,eth_src,arp_dst_ip) in self.sw:
-                if self.sw[(datapath.id,eth_src,arp_dst_ip)] != in_port:
-                    self.avoid_port.setdefault(datapath.id,[]).append(in_port)
-                return True
-            else:
-                self.sw[(datapath.id,eth_src,arp_dst_ip)] = in_port
-                return False
-
 # add switch information to zk_server
 def add_switch_inf_to_ZkServer(switches,srclinks,hosts=None):
-    # switches = '/' + str(switches)
-    # linkes = str(srclinks)
-    #get zk node,judge node whether is null
     zk = zookeeper_server.Zookeeper_Server('127.0.0.1','4181')
-    # print('switch:',switches)     #('switch:', [1, 2, 3])
-    # print('srclinks:',srclinks)   #('srclinks:', [(2, 3, {'attr_dict': {'port': 3, 'srcmac': '72:f4:db:b7:8f:21'}}),
-                                  # (2, 1, {'attr_dict': {'port': 2, 'srcmac': '22:56:29:00:71:a0'}}),
-                                  # (3, 2, {'attr_dict': {'port': 2, 'srcmac': '36:fa:6e:fe:7f:20'}}),
-                                  # (1, 2, {'attr_dict': {'port': 2, 'srcmac': 'f6:3d:a0:bf:ed:ef'}})])
-
-    # print('hosts:',hosts)        #('hosts:', [(2, 1, {'attr_dict': {'ip': [], 'mac': '96:e9:18:fc:8c:14'}}),
-                                 # (3, 1, {'attr_dict': {'ip': [], 'mac': '0a:c0:04:59:2f:b1'}}),
-                                 # (1, 1, {'attr_dict': {'ip': [], 'mac': '16:31:3d:97:c5:75'}})])
 
     #check node and values and ,if node or values or host is nothing, add them
     if zk.jude_node_exists('/controller'):
