@@ -174,39 +174,39 @@ class myShortForwarding(app_manager.RyuApp):
         return out_port
 
 # add switch information to zk_server
-def add_switch_inf_to_ZkServer(switches,srclinks,hosts=None):
-    zk = zookeeper_server.Zookeeper_Server('127.0.0.1','4181')
-
-    #check node and values and ,if node or values or host is nothing, add them
-    if zk.jude_node_exists('/controller'):
-        for switcha in switches:
-            #add links between switch and switch
-            for links in srclinks:
-                if zk.jude_node_exists('/controller' + '/' + str(switcha)):
-                    get_node = zk.get_zk_node('/controller' + '/' + str(switcha))[0]
-                    if switcha == links[0]:
-                        node_value = {}
-                        for node in get_node:
-                            if zk.jude_node_exists('/controller' + '/' + str(switcha) + '/' + node):
-                                get_value = zk.get_zk_node('/controller' + '/' + str(switcha) + '/' + node)[1][0]
-                                node_value[str(node)] = eval(get_value)
-                        if links not in node_value.values():
-                            zk.create_zk_node('/controller' + '/' +str(switcha) + '/' + 'link',links)
-                else:
-                    if switcha == links[0]:
-                        zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'link', links)
-            #add links between switch and host
-            for host in hosts:
-                if zk.jude_node_exists('/controller' + '/' + str(switcha)):
-                    get_node = zk.get_zk_node('/controller' + '/' + str(switcha))[0]
-                    if switcha == host[0]:
-                        host_node_value = {}
-                        for node in get_node:
-                            if zk.jude_node_exists('/controller' + '/' + str(switcha) + '/' + node):
-                                get_value = zk.get_zk_node('/controller' + '/' + str(switcha) + '/' + node)[1][0]
-                                host_node_value[str(node)] = eval(get_value)
-                        if host not in host_node_value.values():
-                            zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'host', host)
-                else:
-                    if switcha == host[0]:
-                        zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'host', host)
+# def add_switch_inf_to_ZkServer(switches,srclinks,hosts=None):
+#     zk = zookeeper_server.Zookeeper_Server('127.0.0.1','4181')
+#
+#     #check node and values and ,if node or values or host is nothing, add them
+#     if zk.jude_node_exists('/controller'):
+#         for switcha in switches:
+#             #add links between switch and switch
+#             for links in srclinks:
+#                 if zk.jude_node_exists('/controller' + '/' + str(switcha)):
+#                     get_node = zk.get_zk_node('/controller' + '/' + str(switcha))[0]
+#                     if switcha == links[0]:
+#                         node_value = {}
+#                         for node in get_node:
+#                             if zk.jude_node_exists('/controller' + '/' + str(switcha) + '/' + node):
+#                                 get_value = zk.get_zk_node('/controller' + '/' + str(switcha) + '/' + node)[1][0]
+#                                 node_value[str(node)] = eval(get_value)
+#                         if links not in node_value.values():
+#                             zk.create_zk_node('/controller' + '/' +str(switcha) + '/' + 'link',links)
+#                 else:
+#                     if switcha == links[0]:
+#                         zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'link', links)
+#             #add links between switch and host
+#             for host in hosts:
+#                 if zk.jude_node_exists('/controller' + '/' + str(switcha)):
+#                     get_node = zk.get_zk_node('/controller' + '/' + str(switcha))[0]
+#                     if switcha == host[0]:
+#                         host_node_value = {}
+#                         for node in get_node:
+#                             if zk.jude_node_exists('/controller' + '/' + str(switcha) + '/' + node):
+#                                 get_value = zk.get_zk_node('/controller' + '/' + str(switcha) + '/' + node)[1][0]
+#                                 host_node_value[str(node)] = eval(get_value)
+#                         if host not in host_node_value.values():
+#                             zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'host', host)
+#                 else:
+#                     if switcha == host[0]:
+#                         zk.create_zk_node('/controller' + '/' + str(switcha) + '/' + 'host', host)
