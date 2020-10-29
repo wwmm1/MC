@@ -23,6 +23,8 @@ from ryu.lib import stplib
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.app import simple_switch_13
+from ryu.topology import event
+from ryu.topology.api import get_link,get_switch
 
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
@@ -33,15 +35,18 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.stp = kwargs['stplib']
+        self.port_forwarded = {}
+        self.port_block = {}
+        self.topology_api_app = self
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.
         config = {dpid_lib.str_to_dpid('0000000000000001'):
-                  {'bridge': {'priority': 0x8000}},
+                      {'bridge': {'priority': 0x8000}},
                   dpid_lib.str_to_dpid('0000000000000002'):
-                  {'bridge': {'priority': 0x9000}},
+                      {'bridge': {'priority': 0x9000}},
                   dpid_lib.str_to_dpid('0000000000000003'):
-                  {'bridge': {'priority': 0xa000}}}
+                      {'bridge': {'priority': 0xa000}}}
         self.stp.set_config(config)
 
     def delete_flow(self, datapath):
@@ -63,6 +68,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
+
         # print('4:in_port:',in_port)
 
         pkt = packet.Packet(msg.data)
@@ -76,28 +82,31 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
-        # learn a mac address to avoid FLOOD next time.
-        self.mac_to_port[dpid][src] = in_port
+        # # learn a mac address to avoid FLOOD next time.
+        # self.mac_to_port[dpid][src] = in_port
+        #
+        # if dst in self.mac_to_port[dpid]:
+        #     out_port = self.mac_to_port[dpid][dst]
+        # else:
+        #     out_port = ofproto.OFPP_FLOOD
+        #
+        # actions = [parser.OFPActionOutput(out_port)]
+        #
+        # # install a flow to avoid packet_in next time
+        # if out_port != ofproto.OFPP_FLOOD:
+        #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+        #     self.add_flow(datapath, 1, match, actions)
+        #
+        # data = None
+        # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+        #     data = msg.data
+        #
+        # out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+        #                           in_port=in_port, actions=actions, data=data)
+        # datapath.send_msg(out)
 
-        if dst in self.mac_to_port[dpid]:
-            out_port = self.mac_to_port[dpid][dst]
-        else:
-            out_port = ofproto.OFPP_FLOOD
-
-        actions = [parser.OFPActionOutput(out_port)]
-
-        # install a flow to avoid packet_in next time
-        if out_port != ofproto.OFPP_FLOOD:
-            match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-            self.add_flow(datapath, 1, match, actions)
-
-        data = None
-        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-            data = msg.data
-
-        out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                  in_port=in_port, actions=actions, data=data)
-        datapath.send_msg(out)
+        # print('forward:', self.port_forwarded)
+        # print('block:', self.port_block)
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -125,3 +134,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                           dpid_str, ev.port_no, of_state[ev.port_state])
         # print('5:ev.port_no:',ev.port_no)
         # print('6:of_State[ev.port_state]:',of_state[ev.port_state])
+
+        if of_state[ev.port_state] == 'FORWARD':
+            self.port_forwarded[dpid_str] = ev.port_no
+        if of_state[ev.port_state] == 'BLOCK':
+            self.port_block[dpid_str] = ev.port_no
