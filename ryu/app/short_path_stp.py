@@ -42,6 +42,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.port_block = {}
         self.topology_api_app = self
         self.network = nx.DiGraph()
+        self.paths = {}
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.
@@ -93,28 +94,33 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src] = in_port
 
-        if dst in self.mac_to_port[dpid]:
-            out_port = self.mac_to_port[dpid][dst]
-        else:
-            out_port = ofproto.OFPP_FLOOD
+        print('mac_to_port:',self.mac_to_port)
 
-        actions = [parser.OFPActionOutput(out_port)]
+        # if dst in self.mac_to_port[dpid]:
+        #     out_port = self.mac_to_port[dpid][dst]
+        # else:
+        #     out_port = ofproto.OFPP_FLOOD
+        # print('out_port:',out_port)
 
-        # install a flow to avoid packet_in next time
-        if out_port != ofproto.OFPP_FLOOD:
-            match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-            self.add_flow(datapath, 1, match, actions)
+        # out_port = self.get_out_port(datapath, src, dst, in_port)
 
-        data = None
-        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-            data = msg.data
-
-        out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                  in_port=in_port, actions=actions, data=data)
-        datapath.send_msg(out)
-
-        # print('forward:', self.port_forwarded)
-        # print('block:', self.port_block)
+        # actions = [parser.OFPActionOutput(out_port)]
+        #
+        # # install a flow to avoid packet_in next time
+        # if out_port != ofproto.OFPP_FLOOD:
+        #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+        #     self.add_flow(datapath, 1, match, actions)
+        #
+        # data = None
+        # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+        #     data = msg.data
+        #
+        # out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+        #                           in_port=in_port, actions=actions, data=data)
+        # datapath.send_msg(out)
+        #
+        # # print('forward:', self.port_forwarded)
+        # # print('block:', self.port_block)
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -163,8 +169,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                  for link in link_list]
         self.network.add_edges_from(links)
 
-        print(links)
-
     def get_out_port(self, datapath, src, dst, in_port):
         dpid = datapath.id
 
@@ -172,19 +176,17 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.network.add_node(src)
             self.network.add_edge(dpid, src, attr_dict={'port': in_port})
             self.network.add_edge(src, dpid)
-            # self.paths.setdefault(src, {})
+            self.paths.setdefault(src, {})
 
-        print(self.network[1][3]['attr_dict']['port'])
+        if dst in self.network:
+            if dst not in self.paths[src]:
+                path = nx.shortest_path(self.network, src, dst)
+                self.paths[src][dst] = path
+                # print(path)
 
-        # if dst in self.network:
-        #     if dst not in self.paths[src]:
-        #         path = nx.shortest_path(self.network, src, dst)
-        #         self.paths[src][dst] = path
-        #         # print(path)
-        #
-        #     path = self.paths[src][dst]
-        #     next_hop = path[path.index(dpid) + 1]
-        #     out_port = self.network[dpid][next_hop]['attr_dict']['port']
-        # else:
-        #     out_port = datapath.ofproto.OFPP_FLOOD
-        # return out_port
+            path = self.paths[src][dst]
+            next_hop = path[path.index(dpid) + 1]
+            out_port = self.network[dpid][next_hop]['attr_dict']['port']
+        else:
+            out_port = datapath.ofproto.OFPP_FLOOD
+        return out_port
