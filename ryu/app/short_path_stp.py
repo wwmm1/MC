@@ -23,8 +23,11 @@ from ryu.lib import stplib
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.app import simple_switch_13
+from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link,get_switch
+
+import networkx as nx
 
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
@@ -38,6 +41,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.port_forwarded = {}
         self.port_block = {}
         self.topology_api_app = self
+        self.network = nx.DiGraph()
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.
@@ -74,6 +78,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
+        #ignore lldp packet
+        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            return
+
         dst = eth.dst
         src = eth.src
 
@@ -82,28 +90,28 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
-        # # learn a mac address to avoid FLOOD next time.
-        # self.mac_to_port[dpid][src] = in_port
-        #
-        # if dst in self.mac_to_port[dpid]:
-        #     out_port = self.mac_to_port[dpid][dst]
-        # else:
-        #     out_port = ofproto.OFPP_FLOOD
-        #
-        # actions = [parser.OFPActionOutput(out_port)]
-        #
-        # # install a flow to avoid packet_in next time
-        # if out_port != ofproto.OFPP_FLOOD:
-        #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-        #     self.add_flow(datapath, 1, match, actions)
-        #
-        # data = None
-        # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-        #     data = msg.data
-        #
-        # out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-        #                           in_port=in_port, actions=actions, data=data)
-        # datapath.send_msg(out)
+        # learn a mac address to avoid FLOOD next time.
+        self.mac_to_port[dpid][src] = in_port
+
+        if dst in self.mac_to_port[dpid]:
+            out_port = self.mac_to_port[dpid][dst]
+        else:
+            out_port = ofproto.OFPP_FLOOD
+
+        actions = [parser.OFPActionOutput(out_port)]
+
+        # install a flow to avoid packet_in next time
+        if out_port != ofproto.OFPP_FLOOD:
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+            self.add_flow(datapath, 1, match, actions)
+
+        data = None
+        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+            data = msg.data
+
+        out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+                                  in_port=in_port, actions=actions, data=data)
+        datapath.send_msg(out)
 
         # print('forward:', self.port_forwarded)
         # print('block:', self.port_block)
@@ -139,3 +147,44 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.port_forwarded[dpid_str] = ev.port_no
         if of_state[ev.port_state] == 'BLOCK':
             self.port_block[dpid_str] = ev.port_no
+
+    @set_ev_cls(event.EventSwitchEnter, [CONFIG_DISPATCHER, MAIN_DISPATCHER])
+    def get_topology(self, ev):
+        switch_list = get_switch(self.topology_api_app, None)
+        switches = [switch.dp.id for switch in switch_list]
+        self.network.add_nodes_from(switches)
+
+        link_list = get_link(self.topology_api_app, None)
+        links = [(link.src.dpid, link.dst.dpid, {'attr_dict': {'port': link.src.port_no}})
+                 for link in link_list]
+        self.network.add_edges_from(links)
+
+        links = [(link.dst.dpid, link.src.dpid, {'attr_dict': {'port': link.dst.port_no}})
+                 for link in link_list]
+        self.network.add_edges_from(links)
+
+        print(links)
+
+    def get_out_port(self, datapath, src, dst, in_port):
+        dpid = datapath.id
+
+        if src not in self.network:
+            self.network.add_node(src)
+            self.network.add_edge(dpid, src, attr_dict={'port': in_port})
+            self.network.add_edge(src, dpid)
+            # self.paths.setdefault(src, {})
+
+        print(self.network[1][3]['attr_dict']['port'])
+
+        # if dst in self.network:
+        #     if dst not in self.paths[src]:
+        #         path = nx.shortest_path(self.network, src, dst)
+        #         self.paths[src][dst] = path
+        #         # print(path)
+        #
+        #     path = self.paths[src][dst]
+        #     next_hop = path[path.index(dpid) + 1]
+        #     out_port = self.network[dpid][next_hop]['attr_dict']['port']
+        # else:
+        #     out_port = datapath.ofproto.OFPP_FLOOD
+        # return out_port
