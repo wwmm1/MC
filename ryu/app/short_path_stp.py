@@ -1,18 +1,3 @@
-# Copyright (C) 2016 Nippon Telegraph and Telephone Corporation.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
@@ -28,6 +13,7 @@ from ryu.topology import event
 from ryu.topology.api import get_link,get_switch
 
 import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
@@ -38,8 +24,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.stp = kwargs['stplib']
-        self.port_forwarded = {}
-        self.port_block = {}
+        self.port_forwarded = []
+        # self.port_block = []
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
@@ -91,10 +77,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
-        # learn a mac address to avoid FLOOD next time.
+        # learn a mac address to avoid FLOOD next time. mac_to_port saved all forward_port
         self.mac_to_port[dpid][src] = in_port
-
-        print('mac_to_port:',self.mac_to_port)
 
         # if dst in self.mac_to_port[dpid]:
         #     out_port = self.mac_to_port[dpid][dst]
@@ -150,9 +134,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # print('6:of_State[ev.port_state]:',of_state[ev.port_state])
 
         if of_state[ev.port_state] == 'FORWARD':
-            self.port_forwarded[dpid_str] = ev.port_no
-        if of_state[ev.port_state] == 'BLOCK':
-            self.port_block[dpid_str] = ev.port_no
+            self.port_forwarded.append({dpid_str:ev.port_no})
+        # if of_state[ev.port_state] == 'BLOCK':
+        #     self.port_block.append({dpid_str:ev.port_no})
 
     @set_ev_cls(event.EventSwitchEnter, [CONFIG_DISPATCHER, MAIN_DISPATCHER])
     def get_topology(self, ev):
