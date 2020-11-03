@@ -1,3 +1,5 @@
+#coding:utf-8
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
@@ -24,7 +26,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.stp = kwargs['stplib']
-        self.port_forwarded = []
+        self.port_forwarded = {}
         # self.port_block = []
         self.topology_api_app = self
         self.network = nx.DiGraph()
@@ -80,6 +82,22 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # learn a mac address to avoid FLOOD next time. mac_to_port saved all forward_port
         self.mac_to_port[dpid][src] = in_port
 
+        #判断转发表里的数据是否和mac表里的数据一致,转发表里保存了：dpid+[端口号]，mac表里保存了:dpid+{源地址,端口号}
+        #判断转发表所有数据和mac表中所有数据是否一致，首先判断交换机数量
+        if len(self.port_forwarded.keys()) == len(self.mac_to_port.keys()):
+            forward_port= []
+            mac_port = []
+            for port in self.port_forwarded.values():
+                forward_port += port
+            for p in self.mac_to_port.values():
+                for port in p.values():
+                    mac_port.append(port)
+            #转发表里的端口数量和mac表里的端口数量一致，说明，网络达到收敛，可以开始计算路径了。
+            if len(forward_port) == len(mac_port):
+                pass
+            else:
+                return
+
         # if dst in self.mac_to_port[dpid]:
         #     out_port = self.mac_to_port[dpid][dst]
         # else:
@@ -133,8 +151,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # print('5:ev.port_no:',ev.port_no)
         # print('6:of_State[ev.port_state]:',of_state[ev.port_state])
 
+        self.port_forwarded.setdefault(dpid_str, [])
         if of_state[ev.port_state] == 'FORWARD':
-            self.port_forwarded.append({dpid_str:ev.port_no})
+            # get forward port
+            self.port_forwarded[dpid_str].append(ev.port_no)
         # if of_state[ev.port_state] == 'BLOCK':
         #     self.port_block.append({dpid_str:ev.port_no})
 
