@@ -80,7 +80,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # learn a mac address to avoid FLOOD next time. mac_to_port saved all forward_port
-        self.mac_to_port[dpid][src] = in_port
+        #需要判断端口是否为转发端口，否则block端口可能会转发（广播）数据
+        if src not in self.mac_to_port[dpid].values():
+            self.mac_to_port[dpid][src] = in_port
 
         #判断转发表里的数据是否和mac表里的数据一致,转发表里保存了：dpid+[端口号]，mac表里保存了:dpid+{源地址,端口号}
         #判断转发表所有数据和mac表中所有数据是否一致，首先判断交换机数量
@@ -94,9 +96,31 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     mac_port.append(port)
             #转发表里的端口数量和mac表里的端口数量一致，说明，网络达到收敛，可以开始计算路径了。
             if len(forward_port) == len(mac_port):
-                pass
+                print('1')
+                # print('forward_port:', forward_port)
+                # print('mac_port:', mac_port)
+                out_port = self.get_out_port(datapath, src, dst, in_port)
+
+                actions = [parser.OFPActionOutput(out_port)]
+
+                # install a flow to avoid packet_in next time
+                if out_port != ofproto.OFPP_FLOOD:
+                    print('out_port:', out_port)
+                    print('actions:', actions)
+                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                    self.add_flow(datapath, 1, match, actions)
+
+                data = None
+                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+                    data = msg.data
+
+                out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+                                          in_port=in_port, actions=actions, data=data)
+                datapath.send_msg(out)
             else:
-                return
+                print('2')
+                print('forward_port:',self.port_forwarded)
+                print('mac_port:',self.mac_to_port)
 
         # if dst in self.mac_to_port[dpid]:
         #     out_port = self.mac_to_port[dpid][dst]
@@ -110,6 +134,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         #
         # # install a flow to avoid packet_in next time
         # if out_port != ofproto.OFPP_FLOOD:
+        #     print('out_port:',out_port)
+        #     print('actions:',actions)
         #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
         #     self.add_flow(datapath, 1, match, actions)
         #
@@ -120,9 +146,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
         #                           in_port=in_port, actions=actions, data=data)
         # datapath.send_msg(out)
-        #
-        # # print('forward:', self.port_forwarded)
-        # # print('block:', self.port_block)
+
+        # print('forward:', self.port_forwarded)
+        # print('block:', self.port_block)
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -181,14 +207,17 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.network.add_edge(dpid, src, attr_dict={'port': in_port})
             self.network.add_edge(src, dpid)
             self.paths.setdefault(src, {})
+            # print('paths:',self.paths)
+            # print('dst:',dst)
 
         if dst in self.network:
             if dst not in self.paths[src]:
                 path = nx.shortest_path(self.network, src, dst)
                 self.paths[src][dst] = path
-                # print(path)
+                print('path1:',path)
 
             path = self.paths[src][dst]
+            print('path2:',path)
             next_hop = path[path.index(dpid) + 1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
         else:
