@@ -80,47 +80,64 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # learn a mac address to avoid FLOOD next time. mac_to_port saved all forward_port
-        #需要判断端口是否为转发端口，否则block端口可能会转发（广播）数据
-        if src not in self.mac_to_port[dpid].values():
-            self.mac_to_port[dpid][src] = in_port
+        self.mac_to_port[dpid][src] = in_port
+
+        out_port = self.get_out_port(datapath, src, dst, in_port)
+
+        actions = [parser.OFPActionOutput(out_port)]
+
+        # install a flow to avoid packet_in next time
+        if out_port != ofproto.OFPP_FLOOD:
+            print('out_port:',out_port)
+            print('actions:',actions)
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+            self.add_flow(datapath, 1, match, actions)
+
+        data = None
+        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+            data = msg.data
+
+        out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+                                  in_port=in_port, actions=actions, data=data)
+        datapath.send_msg(out)
 
         #判断转发表里的数据是否和mac表里的数据一致,转发表里保存了：dpid+[端口号]，mac表里保存了:dpid+{源地址,端口号}
         #判断转发表所有数据和mac表中所有数据是否一致，首先判断交换机数量
-        if len(self.port_forwarded.keys()) == len(self.mac_to_port.keys()):
-            forward_port= []
-            mac_port = []
-            for port in self.port_forwarded.values():
-                forward_port += port
-            for p in self.mac_to_port.values():
-                for port in p.values():
-                    mac_port.append(port)
-            #转发表里的端口数量和mac表里的端口数量一致，说明，网络达到收敛，可以开始计算路径了。
-            if len(forward_port) == len(mac_port):
-                print('1')
-                # print('forward_port:', forward_port)
-                # print('mac_port:', mac_port)
-                out_port = self.get_out_port(datapath, src, dst, in_port)
-
-                actions = [parser.OFPActionOutput(out_port)]
-
-                # install a flow to avoid packet_in next time
-                if out_port != ofproto.OFPP_FLOOD:
-                    print('out_port:', out_port)
-                    print('actions:', actions)
-                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    self.add_flow(datapath, 1, match, actions)
-
-                data = None
-                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                    data = msg.data
-
-                out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                          in_port=in_port, actions=actions, data=data)
-                datapath.send_msg(out)
-            else:
-                print('2')
-                print('forward_port:',self.port_forwarded)
-                print('mac_port:',self.mac_to_port)
+        # if len(self.port_forwarded.keys()) == len(self.mac_to_port.keys()):
+        #     forward_port= []
+        #     mac_port = []
+        #     for port in self.port_forwarded.values():
+        #         forward_port += port
+        #     for p in self.mac_to_port.values():
+        #         for port in p.values():
+        #             mac_port.append(port)
+        #     #转发表里的端口数量和mac表里的端口数量一致，说明，网络达到收敛，可以开始计算路径了。
+        #     if len(forward_port) == len(mac_port):
+        #         print('1')
+        #         # print('forward_port:', forward_port)
+        #         # print('mac_port:', mac_port)
+        #         out_port = self.get_out_port(datapath, src, dst, in_port)
+        #
+        #         actions = [parser.OFPActionOutput(out_port)]
+        #
+        #         # install a flow to avoid packet_in next time
+        #         if out_port != ofproto.OFPP_FLOOD:
+        #             print('out_port:', out_port)
+        #             print('actions:', actions)
+        #             match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+        #             self.add_flow(datapath, 1, match, actions)
+        #
+        #         data = None
+        #         if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+        #             data = msg.data
+        #
+        #         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+        #                                   in_port=in_port, actions=actions, data=data)
+        #         datapath.send_msg(out)
+        #     else:
+        #         print('2')
+        #         print('forward_port:',self.port_forwarded)
+        #         print('mac_port:',self.mac_to_port)
 
         # if dst in self.mac_to_port[dpid]:
         #     out_port = self.mac_to_port[dpid][dst]
@@ -177,10 +194,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         # print('5:ev.port_no:',ev.port_no)
         # print('6:of_State[ev.port_state]:',of_state[ev.port_state])
 
-        self.port_forwarded.setdefault(dpid_str, [])
+        self.port_forwarded.setdefault(ev.dp.id, [])
         if of_state[ev.port_state] == 'FORWARD':
             # get forward port
-            self.port_forwarded[dpid_str].append(ev.port_no)
+            self.port_forwarded[ev.dp.id].append(ev.port_no)
         # if of_state[ev.port_state] == 'BLOCK':
         #     self.port_block.append({dpid_str:ev.port_no})
 
@@ -198,6 +215,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         links = [(link.dst.dpid, link.src.dpid, {'attr_dict': {'port': link.dst.port_no}})
                  for link in link_list]
         self.network.add_edges_from(links)
+
+        print('nodes:',self.network.nodes())
+        print('links:',self.network.edges())
+        print('port_for:',self.port_forwarded)
 
     def get_out_port(self, datapath, src, dst, in_port):
         dpid = datapath.id
