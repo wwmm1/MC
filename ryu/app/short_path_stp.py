@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -12,7 +12,7 @@ from ryu.lib.packet import ethernet
 from ryu.app import simple_switch_13
 from ryu.lib.packet import ether_types
 from ryu.topology import event
-from ryu.topology.api import get_link,get_switch
+from ryu.topology.api import get_link, get_switch
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -67,7 +67,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
-        #ignore lldp packet
+        # ignore lldp packet
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
             return
 
@@ -88,8 +88,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         # install a flow to avoid packet_in next time
         if out_port != ofproto.OFPP_FLOOD:
-            print('out_port:',out_port)
-            print('actions:',actions)
+            # print('out_port:',out_port)
+            # print('actions:',actions)
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
             self.add_flow(datapath, 1, match, actions)
 
@@ -100,72 +100,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
-
-        #判断转发表里的数据是否和mac表里的数据一致,转发表里保存了：dpid+[端口号]，mac表里保存了:dpid+{源地址,端口号}
-        #判断转发表所有数据和mac表中所有数据是否一致，首先判断交换机数量
-        # if len(self.port_forwarded.keys()) == len(self.mac_to_port.keys()):
-        #     forward_port= []
-        #     mac_port = []
-        #     for port in self.port_forwarded.values():
-        #         forward_port += port
-        #     for p in self.mac_to_port.values():
-        #         for port in p.values():
-        #             mac_port.append(port)
-        #     #转发表里的端口数量和mac表里的端口数量一致，说明，网络达到收敛，可以开始计算路径了。
-        #     if len(forward_port) == len(mac_port):
-        #         print('1')
-        #         # print('forward_port:', forward_port)
-        #         # print('mac_port:', mac_port)
-        #         out_port = self.get_out_port(datapath, src, dst, in_port)
-        #
-        #         actions = [parser.OFPActionOutput(out_port)]
-        #
-        #         # install a flow to avoid packet_in next time
-        #         if out_port != ofproto.OFPP_FLOOD:
-        #             print('out_port:', out_port)
-        #             print('actions:', actions)
-        #             match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-        #             self.add_flow(datapath, 1, match, actions)
-        #
-        #         data = None
-        #         if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-        #             data = msg.data
-        #
-        #         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-        #                                   in_port=in_port, actions=actions, data=data)
-        #         datapath.send_msg(out)
-        #     else:
-        #         print('2')
-        #         print('forward_port:',self.port_forwarded)
-        #         print('mac_port:',self.mac_to_port)
-
-        # if dst in self.mac_to_port[dpid]:
-        #     out_port = self.mac_to_port[dpid][dst]
-        # else:
-        #     out_port = ofproto.OFPP_FLOOD
-        # print('out_port:',out_port)
-
-        # out_port = self.get_out_port(datapath, src, dst, in_port)
-
-        # actions = [parser.OFPActionOutput(out_port)]
-        #
-        # # install a flow to avoid packet_in next time
-        # if out_port != ofproto.OFPP_FLOOD:
-        #     print('out_port:',out_port)
-        #     print('actions:',actions)
-        #     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-        #     self.add_flow(datapath, 1, match, actions)
-        #
-        # data = None
-        # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-        #     data = msg.data
-        #
-        # out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-        #                           in_port=in_port, actions=actions, data=data)
-        # datapath.send_msg(out)
-
-        # print('forward:', self.port_forwarded)
-        # print('block:', self.port_block)
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -216,12 +150,23 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                  for link in link_list]
         self.network.add_edges_from(links)
 
-        print('nodes:',self.network.nodes())
-        print('links:',self.network.edges())
-        print('port_for:',self.port_forwarded)
+        # print('nodes:', self.network.nodes())
+        # print('links:', self.network.edges())
+        # print('port_for:', self.port_forwarded)
 
     def get_out_port(self, datapath, src, dst, in_port):
+        '''
+        首先根据转发端口删除network里不能转发数据的链路
+        self.port_forward-->{dpid:[port]}
+        self.netword.edges()-->[(src_dpid,dst_dpid,{'attr_dict':{port:src_port}})]
+                               [(dst_dpid,src_dpid,{'attr_dict':{port:dst_port}})]
+        '''
         dpid = datapath.id
+
+        print('edges',nx.get_edge_attributes(self.network,'attr_port'))
+
+
+
 
         if src not in self.network:
             self.network.add_node(src)
@@ -235,12 +180,13 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             if dst not in self.paths[src]:
                 path = nx.shortest_path(self.network, src, dst)
                 self.paths[src][dst] = path
-                print('path1:',path)
 
             path = self.paths[src][dst]
-            print('path2:',path)
+            # print('path2:',path)
             next_hop = path[path.index(dpid) + 1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
+            # print('out_port%s%s:' % (dpid, out_port))
+            # print('path:',path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
