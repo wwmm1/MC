@@ -158,23 +158,19 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         '''
         首先根据转发端口删除network里不能转发数据的链路
         self.port_forward-->{dpid:[port]}
-        self.netword.edges()-->[(src_dpid,dst_dpid,{'attr_dict':{port:src_port}})]
-                               [(dst_dpid,src_dpid,{'attr_dict':{port:dst_port}})]
+        self.netword[dpid]-->{dst_dpid:{'attr_dict':{'port':src_port}}}
+                             {src_dpid,{'attr_dict':{'port':dst_port}}}
+        seif.get_avai_port(dpid,network) return n_port --> {dpid:[port1,port2,port3...]}
         '''
         dpid = datapath.id
-
-        print('edges',nx.get_edge_attributes(self.network,'attr_port'))
-
-
-
-
         if src not in self.network:
             self.network.add_node(src)
             self.network.add_edge(dpid, src, attr_dict={'port': in_port})
             self.network.add_edge(src, dpid)
             self.paths.setdefault(src, {})
-            # print('paths:',self.paths)
-            # print('dst:',dst)
+
+        self.get_avai_port(dpid, self.network)
+        # print('network:',self.network)
 
         if dst in self.network:
             if dst not in self.paths[src]:
@@ -182,11 +178,26 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
-            # print('path2:',path)
             next_hop = path[path.index(dpid) + 1]
             out_port = self.network[dpid][next_hop]['attr_dict']['port']
-            # print('out_port%s%s:' % (dpid, out_port))
-            # print('path:',path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         return out_port
+
+    def get_avai_port(self, dpid, network):
+        '''
+        self.port_forward-->{dpid:[port]}
+        network -->  {dpid: {'attr_dict': {'port': 3}}}
+        v --> {'attr_dict':{'port':3}}
+        port --> {'port':3}
+        n_port --> {dpid:[port1,port2,port3...]}
+        '''
+        print('network1',network[dpid])
+        # for k,v in network[dpid].items():
+        #     port = v['attr_dict']['port']
+        #     if port not in self.port_forwarded[dpid]:
+        #         del network[dpid][k]
+        #
+        # print('network2',network)
+        # return network
+
