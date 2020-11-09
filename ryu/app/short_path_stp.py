@@ -169,35 +169,28 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.network.add_edge(src, dpid)
             self.paths.setdefault(src, {})
 
-        self.get_avai_port(dpid, self.network)
+        # self.get_avai_port(dpid, self.network)
         # print('network:',self.network)
 
-        if dst in self.network:
+        if dst in self.get_avai_port(dpid,self.network):
             if dst not in self.paths[src]:
-                path = nx.shortest_path(self.network, src, dst)
+                path = nx.shortest_path(self.get_avai_port(dpid,self.network), src, dst)
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid) + 1]
-            out_port = self.network[dpid][next_hop]['attr_dict']['port']
+            out_port = self.get_avai_port(dpid,self.network)[dpid][next_hop]['attr_dict']['port']
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
+        # print('out_port',out_port)
         return out_port
 
     def get_avai_port(self, dpid, network):
-        '''
-        self.port_forward-->{dpid:[port]}
-        network -->  {dpid: {'attr_dict': {'port': 3}}}
-        v --> {'attr_dict':{'port':3}}
-        port --> {'port':3}
-        n_port --> {dpid:[port1,port2,port3...]}
-        '''
-        print('network1',network[dpid])
-        # for k,v in network[dpid].items():
-        #     port = v['attr_dict']['port']
-        #     if port not in self.port_forwarded[dpid]:
-        #         del network[dpid][k]
-        #
-        # print('network2',network)
-        # return network
+        for k,v in network[dpid].items():
+            port = v['attr_dict']['port']
+            if port not in self.port_forwarded[dpid]:
+                network.remove_edge(dpid,k)
 
+        # print('dpid2',network[dpid])
+        # print('dpid,%s,edges2,%s',(dpid,network.edges()))
+        return network
