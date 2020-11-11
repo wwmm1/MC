@@ -62,8 +62,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
 
-        # print('4:in_port:',in_port)
-
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
@@ -88,8 +86,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         # install a flow to avoid packet_in next time
         if out_port != ofproto.OFPP_FLOOD:
-            # print('out_port:',out_port)
-            # print('actions:',actions)
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
             self.add_flow(datapath, 1, match, actions)
 
@@ -104,9 +100,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
         dp = ev.dp
-        # print('1:dp:',dp)
         dpid_str = dpid_lib.dpid_to_str(dp.id)
-        # print('3:dpid_str:',dpid_str)
         msg = 'Receive topology change event. Flush MAC table.'
         self.logger.debug("[dpid=%s] %s", dpid_str, msg)
 
@@ -117,7 +111,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     @set_ev_cls(stplib.EventPortStateChange, MAIN_DISPATCHER)
     def _port_state_change_handler(self, ev):
         dpid_str = dpid_lib.dpid_to_str(ev.dp.id)
-        # print('2:dpid_str:',dpid_str)
         of_state = {stplib.PORT_STATE_DISABLE: 'DISABLE',
                     stplib.PORT_STATE_BLOCK: 'BLOCK',
                     stplib.PORT_STATE_LISTEN: 'LISTEN',
@@ -125,8 +118,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     stplib.PORT_STATE_FORWARD: 'FORWARD'}
         self.logger.debug("[dpid=%s][port=%d] state=%s",
                           dpid_str, ev.port_no, of_state[ev.port_state])
-        # print('5:ev.port_no:',ev.port_no)
-        # print('6:of_State[ev.port_state]:',of_state[ev.port_state])
 
         self.port_forwarded.setdefault(ev.dp.id, [])
         if of_state[ev.port_state] == 'FORWARD':
@@ -150,47 +141,48 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                  for link in link_list]
         self.network.add_edges_from(links)
 
-        # print('nodes:', self.network.nodes())
-        # print('links:', self.network.edges())
-        # print('port_for:', self.port_forwarded)
-
     def get_out_port(self, datapath, src, dst, in_port):
         '''
-        首先根据转发端口删除network里不能转发数据的链路
+        首先根据转发端口删除network里不能转发数据的链路,使用self.get_avai_port(dpid,self.network)方法.
         self.port_forward-->{dpid:[port]}
-        self.netword[dpid]-->{dst_dpid:{'attr_dict':{'port':src_port}}}
-                             {src_dpid,{'attr_dict':{'port':dst_port}}}
-        seif.get_avai_port(dpid,network) return n_port --> {dpid:[port1,port2,port3...]}
+        #self.get_avai_port()返回删除了与阻断端口相连的链路的network
+       self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
         '''
+
         dpid = datapath.id
-        if src not in self.network:
-            self.network.add_node(src)
-            self.network.add_edge(dpid, src, attr_dict={'port': in_port})
-            self.network.add_edge(src, dpid)
+        # 返回删除了阻断端口链路的network
+        get_avai_port = self.get_avai_port(dpid, self.network)
+
+        if src not in get_avai_port:
+            get_avai_port.add_node(src)
+            get_avai_port.add_edge(dpid, src, attr_dict={'port': in_port})
+            get_avai_port.add_edge(src, dpid)
             self.paths.setdefault(src, {})
 
-        # self.get_avai_port(dpid, self.network)
-        # print('network:',self.network)
-
-        if dst in self.get_avai_port(dpid,self.network):
+        if dst in get_avai_port:
             if dst not in self.paths[src]:
-                path = nx.shortest_path(self.get_avai_port(dpid,self.network), src, dst)
+                path = nx.shortest_path(get_avai_port, src, dst)
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid) + 1]
-            out_port = self.get_avai_port(dpid,self.network)[dpid][next_hop]['attr_dict']['port']
+            out_port = get_avai_port[dpid][next_hop]['attr_dict']['port']
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
-        # print('out_port',out_port)
         return out_port
 
     def get_avai_port(self, dpid, network):
-        for k,v in network[dpid].items():
+        '''
+        :param dpid:switch id
+        :param network:self.network
+        :return: 删除了与阻断端口相连的链路的network
+        '''
+        for k, v in network[dpid].items():
             port = v['attr_dict']['port']
-            if port not in self.port_forwarded[dpid]:
-                network.remove_edge(dpid,k)
+            if len(self.port_forwarded[dpid]) != 0:
+                if port not in self.port_forwarded[dpid]:
+                    # 需要删除正反向链路,计算最短路径时若有一条链路没删除,将提示A to B 无链路(无法正确连通).
+                    network.remove_edge(dpid, k)
+                    network.remove_edge(k, dpid)
 
-        # print('dpid2',network[dpid])
-        # print('dpid,%s,edges2,%s',(dpid,network.edges()))
         return network
