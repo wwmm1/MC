@@ -13,9 +13,8 @@ from ryu.app import simple_switch_13
 from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
-
 import networkx as nx
-import matplotlib.pyplot as plt
+import zookeeper_server as zks
 
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
