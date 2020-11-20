@@ -17,6 +17,8 @@ import networkx as nx
 import zookeeper_server as zks
 
 
+
+
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _CONTEXTS = {'stplib': stplib.Stp}
@@ -147,7 +149,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         #self.get_avai_port()返回删除了与阻断端口相连的链路的network
        self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
         '''
-
         dpid = datapath.id
         # 返回删除了阻断端口链路的network
         get_avai_port = self.get_avai_port(dpid, self.network)
