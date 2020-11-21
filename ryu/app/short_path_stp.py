@@ -9,15 +9,14 @@ from ryu.lib import dpid as dpid_lib
 from ryu.lib import stplib
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
+from ryu.lib.packet import arp
+from ryu.lib.packet import icmp, ipv4
 from ryu.app import simple_switch_13
 from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
 import networkx as nx
 import zookeeper_server as zks
-
-
-
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -32,6 +31,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
+        self.arp_table = {}
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.
@@ -65,6 +65,20 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
+        arp_pkt = pkt.get_protocol(arp.arp)
+        # ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
+        icmp_pkt = pkt.get_protocol(icmp.icmp)
+
+        if arp_pkt !=None :
+            # print('dstip',arp_pkt.dst_ip)
+            # print('srcip',arp_pkt.src_ip)
+            # print('opcode',arp_pkt.opcode)
+            # print('arp:',arp_pkt)
+            self._arp_handler(msg, arp_pkt)
+        if icmp_pkt != None:
+            # print('type',icmp_pkt.type)
+            # print('icmp',icmp_pkt)
+            self._icmp_handler(msg,icmp_pkt)
 
         # ignore lldp packet
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
@@ -186,3 +200,16 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     network.remove_edge(k, dpid)
 
         return network
+
+    def _arp_handler(self, msg, arp_pkt):
+        src_ip = arp_pkt.src_ip
+        dst_ip = arp_pkt.dst_ip
+        opcode = arp_pkt.opcode
+        print('src',src_ip)
+        print('dst',dst_ip)
+        print('opcode',opcode)
+
+    def _icmp_handler(self,msg,icmp_pkt):
+        type = icmp_pkt.type
+        print('type',type)
+
