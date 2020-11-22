@@ -18,6 +18,7 @@ from ryu.topology.api import get_link, get_switch
 import networkx as nx
 import zookeeper_server as zks
 
+
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _CONTEXTS = {'stplib': stplib.Stp}
@@ -62,23 +63,20 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
+        dpid = datapath.id
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
         arp_pkt = pkt.get_protocol(arp.arp)
-        # ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
+        ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         icmp_pkt = pkt.get_protocol(icmp.icmp)
 
-        if arp_pkt !=None :
-            # print('dstip',arp_pkt.dst_ip)
-            # print('srcip',arp_pkt.src_ip)
-            # print('opcode',arp_pkt.opcode)
-            # print('arp:',arp_pkt)
-            self._arp_handler(msg, arp_pkt)
+        self.arp_table.setdefault(dpid, {})
+
+        if arp_pkt != None:
+            self._arp_handler(datapath, msg, arp_pkt)
         if icmp_pkt != None:
-            # print('type',icmp_pkt.type)
-            # print('icmp',icmp_pkt)
-            self._icmp_handler(msg,icmp_pkt)
+            self._icmp_handler(msg, icmp_pkt)
 
         # ignore lldp packet
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
@@ -87,7 +85,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         dst = eth.dst
         src = eth.src
 
-        dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
 
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
@@ -201,15 +198,39 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         return network
 
-    def _arp_handler(self, msg, arp_pkt):
+    def _arp_handler(self, datapath, msg, arp_pkt):
+        '''
+        ARP_REQUEST = 1
+        ARP_REPLY = 2
+        ARP_REV_REQUEST = 3
+        ARP_REV_REPLY = 4
+        '''
+        in_port = msg.match['in_port']
         src_ip = arp_pkt.src_ip
-        dst_ip = arp_pkt.dst_ip
-        opcode = arp_pkt.opcode
-        print('src',src_ip)
-        print('dst',dst_ip)
-        print('opcode',opcode)
+        src_mac = arp_pkt.src_mac
+        # dst_ip = arp_pkt.dst_ip
+        # dst_mac = arp_pkt.dst_mac
+        # opcode = arp_pkt.opcode
+        dpid = datapath.id
 
-    def _icmp_handler(self,msg,icmp_pkt):
+        if src_ip not in self.arp_table[dpid]:
+            self.arp_table[dpid][src_ip] = (src_mac, {'in_port': in_port})
+
+        print('arp', self.arp_table)
+
+    def _icmp_handler(self, msg, icmp_pkt):
+        '''
+        ICMP_ECHO_REPLY = 0
+        ICMP_DEST_UNREACH = 3
+        ICMP_SRC_QUENCH = 4
+        ICMP_REDIRECT = 5
+        ICMP_ECHO_REQUEST = 8
+        ICMP_TIME_EXCEEDED = 11
+
+        ICMP_ECHO_REPLY_CODE = 0
+        ICMP_HOST_UNREACH_CODE = 1
+        ICMP_PORT_UNREACH_CODE = 3
+        ICMP_TTL_EXPIRED_CODE = 0
+        '''
         type = icmp_pkt.type
-        print('type',type)
-
+        print('type', type)
