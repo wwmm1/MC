@@ -111,7 +111,7 @@ class ExampleSwitch13(app_manager.RyuApp):
     def port_status_handler(self,ev):
         '''
         self.port_dpid  => {dpid:{port:port_mac_address}}
-        ex : {1: {1: 'ce:ce:37:00:56:d5', 2: '16:ae:7d:82:a2:44'}}
+        example : {1: {1: 'ce:ce:37:00:56:d5', 2: '16:ae:7d:82:a2:44'}}
         '''
         msg = ev.msg
         port_desc = msg.desc
