@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<switchs>
-    <switch id="1" mac="11:11:11:11:11:11">192.168.1.1</switch>
-    <switch id="2" mac="22:22:22:22:22:22">192.168.2.1</switch>
-    <switch id="3" mac="33:33:33:33:33:33">192.168.3.1</switch>
-    <switch id="4" mac="44:44:44:44:44:44">192.168.4.1</switch>
-    <switch id="5" mac="55:55:55:55:55:55">192.168.5.1</switch>
-    <switch id="6" mac="66:66:66:66:66:66">192.168.6.1</switch>
-</switchs>
+<switchlist>
+    <switch id="1">
+        <port id="1">192.168.1.1</port>
+    </switch>
+    <switch id="2">
+        <port id="1">192.168.2.1</port>
+    </switch>
+    <switch id="3">
+        <port id="1">192.168.3.1</port>
+    </switch>
+    <switch id="4">
+        <port id="1">192.168.4.1</port>
+    </switch>
+    <switch id="5">
+        <port id="1">192.168.5.1</port>
+    </switch>
+    <switch id="6">
+        <port id="1">192.168.6.1</port>
+    </switch>
+</switchlist>

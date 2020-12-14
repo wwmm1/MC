@@ -6,9 +6,8 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import arp, icmp, ipv4
+import xml.dom.minidom
 
-SWITCH1_IP = '192.168.1.1'
-SWITCH2_IP = '192.168.2.1'
 
 
 class ExampleSwitch13(app_manager.RyuApp):
@@ -18,7 +17,9 @@ class ExampleSwitch13(app_manager.RyuApp):
         super(ExampleSwitch13, self).__init__(*args, **kwargs)
         # initialize mac address table.
         self.mac_to_port = {}
-        self.port_dpid = {}
+        self.port_dpid = {}    #port:mac
+        self.port_ip = {}   #port:ip
+        self.port_mac_ip = {}   #port:{mac:ip}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -111,7 +112,7 @@ class ExampleSwitch13(app_manager.RyuApp):
     def port_status_handler(self,ev):
         '''
         self.port_dpid  => {dpid:{port:port_mac_address}}
-        ex : {1: {1: 'ce:ce:37:00:56:d5', 2: '16:ae:7d:82:a2:44'}}
+        example : {1: {1: 'ce:ce:37:00:56:d5', 2: '16:ae:7d:82:a2:44'}}
         '''
         msg = ev.msg
         port_desc = msg.desc
@@ -123,7 +124,35 @@ class ExampleSwitch13(app_manager.RyuApp):
 
         self.port_dpid[dpid][port_no] = port_hw_addr
 
+        self.get_switch_port_ip()
+
         # print(self.port_dpid)
+
+    def get_switch_port_ip(self):
+        '''
+        ('port_id', u'1')
+        ('port_ip', u'192.168.6.1')
+        ('s_id', u'6')
+        ('port_ip', {u'1': {u'1': u'192.168.1.1'}, u'3': {u'1': u'192.168.3.1'}, u'2': {u'1': u'192.168.2.1'},
+        u'5': {u'1': u'192.168.5.1'}, u'4': {u'1': u'192.168.4.1'}, u'6': {u'1': u'192.168.6.1'}})
+        '''
+        dom = xml.dom.minidom.parse('ip_router.xml')
+        root = dom.documentElement
+
+        switchs = root.getElementsByTagName('switch')
+        for switch in switchs:
+            switch_id = switch.getAttribute('id')
+            if switch_id not in self.port_ip:
+                self.port_ip.setdefault(switch_id,{})
+            switch_port = switch.getElementsByTagName('port')
+            for port in switch_port:
+                port_id = port.getAttribute('id')
+                port_ip = port.childNodes[0].data
+                if port_id not in self.port_ip[switch_id]:
+                    self.port_ip[switch_id][port_id] = port_ip
+
+            print('port_ip',self.port_ip)
+
 
 
 
