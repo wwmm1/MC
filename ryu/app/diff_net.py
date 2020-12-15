@@ -9,7 +9,6 @@ from ryu.lib.packet import arp, icmp, ipv4
 import xml.dom.minidom
 
 
-
 class ExampleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -17,9 +16,9 @@ class ExampleSwitch13(app_manager.RyuApp):
         super(ExampleSwitch13, self).__init__(*args, **kwargs)
         # initialize mac address table.
         self.mac_to_port = {}
-        self.port_dpid = {}    #port:mac
-        self.port_ip = {}   #port:ip
-        self.port_mac_ip = {}   #port:{mac:ip}
+        self.dpid_port_mac = {}  # dpid:{port:mac}
+        self.dpid_port_ip = {}  # dpid:{port:ip}
+        self.dpid_port_mac_ip = {}  # dpid:{port:{mac:ip}}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -66,7 +65,7 @@ class ExampleSwitch13(app_manager.RyuApp):
         if arp_pkt != None:
             self.arp_handler(datapath, msg)
             # print('1')
-            print('msg',self.port_dpid)
+            print('msg', self.port_dpid)
             # print('pkt',pkt)
         if icmp_pkt != None:
             self.icmp_handler(datapath, msg)
@@ -108,8 +107,8 @@ class ExampleSwitch13(app_manager.RyuApp):
     def icmp_handler(self, datapath, msg):
         pass
 
-    @set_ev_cls(ofp_event.EventOFPPortStatus,MAIN_DISPATCHER)
-    def port_status_handler(self,ev):
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    def port_status_handler(self, ev):
         '''
         self.port_dpid  => {dpid:{port:port_mac_address}}
         example : {1: {1: 'ce:ce:37:00:56:d5', 2: '16:ae:7d:82:a2:44'}}
@@ -117,44 +116,62 @@ class ExampleSwitch13(app_manager.RyuApp):
         msg = ev.msg
         port_desc = msg.desc
         dpid = msg.datapath.id
-        self.port_dpid.setdefault(dpid,{})
+        self.dpid_port_mac.setdefault(dpid, {})
 
         port_no = port_desc.port_no
         port_hw_addr = port_desc.hw_addr
 
-        self.port_dpid[dpid][port_no] = port_hw_addr
+        self.dpid_port_mac[dpid][port_no] = port_hw_addr
 
-        self.get_switch_port_ip()
+        self.get_switch_port_ip(self.dpid_port_mac)
+
+        # self.arp_handler(msg.datapath,msg)
 
         # print(self.port_dpid)
 
-    def get_switch_port_ip(self):
+    def get_switch_port_ip(self, dpid_port_mac):
         '''
         ('port_id', u'1')
         ('port_ip', u'192.168.6.1')
         ('s_id', u'6')
-        ('port_ip', {u'1': {u'1': u'192.168.1.1'}, u'3': {u'1': u'192.168.3.1'}, u'2': {u'1': u'192.168.2.1'},
-        u'5': {u'1': u'192.168.5.1'}, u'4': {u'1': u'192.168.4.1'}, u'6': {u'1': u'192.168.6.1'}})
+        ({'1': {'1': '192.168.1.1'}, '3': {'1': '192.168.3.1'}, '2': {'1': '192.168.2.1'},
+        '5': {'1': '192.168.5.1'}, '4': {'1': '192.168.4.1'}, '6': {'1': '192.168.6.1'}})
         '''
+        # print('d_p_m', dpid_port_mac)
         dom = xml.dom.minidom.parse('ip_router.xml')
         root = dom.documentElement
 
         switchs = root.getElementsByTagName('switch')
         for switch in switchs:
-            switch_id = switch.getAttribute('id')
-            if switch_id not in self.port_ip:
-                self.port_ip.setdefault(switch_id,{})
+            switch_id = str(switch.getAttribute('id'))  # switch_id convert string
+            if switch_id not in self.dpid_port_ip:
+                self.dpid_port_ip.setdefault(switch_id, {})
             switch_port = switch.getElementsByTagName('port')
             for port in switch_port:
-                port_id = port.getAttribute('id')
-                port_ip = port.childNodes[0].data
-                if port_id not in self.port_ip[switch_id]:
-                    self.port_ip[switch_id][port_id] = port_ip
+                port_id = str(port.getAttribute('id'))  # port_id convert string
+                port_ip = str(port.childNodes[0].data)  # port_ip convert string
+                if port_id not in self.dpid_port_ip[switch_id]:
+                    self.dpid_port_ip[switch_id][port_id] = port_ip
 
-            print('port_ip',self.port_ip)
+        if self.dpid_port_ip:
+            # print('d_p_i', self.dpid_port_ip)
+            for dpi, po_id in self.dpid_port_ip.items():  # get key,values --> key = dpid, values = {'port':'ip'}
+                dp_id = int(dpi)
+                # print('dp_id', dp_id)
+                # print('po_id', po_id)
+                self.dpid_port_mac_ip.setdefault(dp_id, {})
+                if dpid_port_mac.get(dp_id) is not None:
+                    for k, v in po_id.items():  # k --> port_id, v --> port_ip
+                        p_id = int(k)
+                        p_ip = v
+                        # print('p_id', p_id)
+                        # print('p_ip', p_ip)
+                        # print('dp:', dpid_port_mac.get(int(dp_id)))
+                        if p_id not in self.dpid_port_mac_ip[dp_id]:
+                            for p_k, p_m in dpid_port_mac.get(dp_id).items():  # p_k --> port_id, p_m --> port_mac
+                                # print('p_k', p_k)
+                                # print('p_m', p_m)
+                                if int(p_id) == p_k:
+                                    self.dpid_port_mac_ip[dp_id][p_id] = (p_m, p_ip)
 
-
-
-
-
-
+        # print('dpmi',self.dpid_port_mac_ip)
