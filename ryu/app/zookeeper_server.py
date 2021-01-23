@@ -1,6 +1,6 @@
 #*-* coding:utf-8 -*-
 from kazoo.client import KazooClient
-# from kazoo.recipe.lock import Lock
+
 
 class Zookeeper_Server:
 
