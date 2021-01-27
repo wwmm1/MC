@@ -163,6 +163,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         dpid = datapath.id
         # 返回删除了阻断端口链路的network
         get_avai_port = self.get_avai_port(dpid, self.network)
+        # for k,v in get_avai_port[dpid].items():
+        #     print('get_avai_port[%s]:'%dpid,get_avai_port[dpid])
+        #     print('k',k)
+        #     print('v',v)
 
         if src not in get_avai_port:
             get_avai_port.add_node(src)
@@ -178,7 +182,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid) + 1]
             out_port = get_avai_port[dpid][next_hop]['attr_dict']['port']
-            print('path:',path)
+            # print('path:',path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         # print("out_port:",out_port)
@@ -198,7 +202,16 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     network.remove_edge(dpid, k)
                     network.remove_edge(k, dpid)
 
+                    self.write_to_txt(str(dpid),' --> ',str(port))
+
         return network
+
+    def write_to_txt(self,*content):
+        with open('aa.txt','w') as f:
+            f.write('\n')
+            for c in content:
+                f.write(c)
+            f.write('\n')
 
     # def _arp_handler(self, datapath, msg, arp_pkt):
     #     '''
