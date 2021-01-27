@@ -32,7 +32,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
-        self.arp_table = {}
+        # self.arp_table = {}
 
         # Sample of stplib config.
         #  please refer to stplib.Stp.set_config() for details.
@@ -67,16 +67,16 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
-        arp_pkt = pkt.get_protocol(arp.arp)
-        ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
-        icmp_pkt = pkt.get_protocol(icmp.icmp)
+        # arp_pkt = pkt.get_protocol(arp.arp)
+        # ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
+        # icmp_pkt = pkt.get_protocol(icmp.icmp)
 
-        self.arp_table.setdefault(dpid, {})
+        # self.arp_table.setdefault(dpid, {})
 
-        if arp_pkt != None:
-            self._arp_handler(datapath, msg, arp_pkt)
-        if icmp_pkt != None:
-            self._icmp_handler(msg, icmp_pkt)
+        # if arp_pkt != None:
+        #     self._arp_handler(datapath, msg, arp_pkt)
+        # if icmp_pkt != None:
+        #     self._icmp_handler(msg, icmp_pkt)
 
         # ignore lldp packet
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
@@ -178,8 +178,10 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             path = self.paths[src][dst]
             next_hop = path[path.index(dpid) + 1]
             out_port = get_avai_port[dpid][next_hop]['attr_dict']['port']
+            print('path:',path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
+        # print("out_port:",out_port)
         return out_port
 
     def get_avai_port(self, dpid, network):
@@ -198,39 +200,39 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         return network
 
-    def _arp_handler(self, datapath, msg, arp_pkt):
-        '''
-        ARP_REQUEST = 1
-        ARP_REPLY = 2
-        ARP_REV_REQUEST = 3
-        ARP_REV_REPLY = 4
-        '''
-        in_port = msg.match['in_port']
-        src_ip = arp_pkt.src_ip
-        src_mac = arp_pkt.src_mac
-        # dst_ip = arp_pkt.dst_ip
-        # dst_mac = arp_pkt.dst_mac
-        # opcode = arp_pkt.opcode
-        dpid = datapath.id
+    # def _arp_handler(self, datapath, msg, arp_pkt):
+    #     '''
+    #     ARP_REQUEST = 1
+    #     ARP_REPLY = 2
+    #     ARP_REV_REQUEST = 3
+    #     ARP_REV_REPLY = 4
+    #     '''
+    #     in_port = msg.match['in_port']
+    #     src_ip = arp_pkt.src_ip
+    #     src_mac = arp_pkt.src_mac
+    #     # dst_ip = arp_pkt.dst_ip
+    #     # dst_mac = arp_pkt.dst_mac
+    #     # opcode = arp_pkt.opcode
+    #     dpid = datapath.id
+    #
+    #     if src_ip not in self.arp_table[dpid]:
+    #         self.arp_table[dpid][src_ip] = (src_mac, {'in_port': in_port})
+    #
+    #     print('arp', self.arp_table)
 
-        if src_ip not in self.arp_table[dpid]:
-            self.arp_table[dpid][src_ip] = (src_mac, {'in_port': in_port})
-
-        print('arp', self.arp_table)
-
-    def _icmp_handler(self, msg, icmp_pkt):
-        '''
-        ICMP_ECHO_REPLY = 0
-        ICMP_DEST_UNREACH = 3
-        ICMP_SRC_QUENCH = 4
-        ICMP_REDIRECT = 5
-        ICMP_ECHO_REQUEST = 8
-        ICMP_TIME_EXCEEDED = 11
-
-        ICMP_ECHO_REPLY_CODE = 0
-        ICMP_HOST_UNREACH_CODE = 1
-        ICMP_PORT_UNREACH_CODE = 3
-        ICMP_TTL_EXPIRED_CODE = 0
-        '''
-        type = icmp_pkt.type
-        print('type', type)
+    # def _icmp_handler(self, msg, icmp_pkt):
+    #     '''
+    #     ICMP_ECHO_REPLY = 0
+    #     ICMP_DEST_UNREACH = 3
+    #     ICMP_SRC_QUENCH = 4
+    #     ICMP_REDIRECT = 5
+    #     ICMP_ECHO_REQUEST = 8
+    #     ICMP_TIME_EXCEEDED = 11
+    #
+    #     ICMP_ECHO_REPLY_CODE = 0
+    #     ICMP_HOST_UNREACH_CODE = 1
+    #     ICMP_PORT_UNREACH_CODE = 3
+    #     ICMP_TTL_EXPIRED_CODE = 0
+    #     '''
+    #     type = icmp_pkt.type
+    #     print('type', type)
