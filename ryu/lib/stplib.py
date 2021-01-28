@@ -35,13 +35,11 @@ from ryu.ofproto import ofproto_v1_0
 from ryu.ofproto import ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3
 
-
 MAX_PORT_NO = 0xfff
 
 # for OpenFlow 1.2/1.3
 BPDU_PKT_IN_PRIORITY = 0xffff
 NO_PKT_IN_PRIORITY = 0xfffe
-
 
 # Result of compared config BPDU priority.
 SUPERIOR = -1
@@ -81,7 +79,6 @@ NON_DESIGNATED_PORT = 2  # The port which blocked.
      NON_DESIGNATED_PORT(ND):
        the port other than a ROOT_PORT and DESIGNATED_PORT.
 """
-
 
 # Port state
 #  DISABLE: Administratively down or link down by an obstacle.
@@ -493,7 +490,7 @@ class Bridge(object):
             # - If received Topology Change BPDU:
             #    Throws EventTopologyChange.
             #    Forwards Topology Change BPDU.
-            (bpdu_pkt, ) = pkt.get_protocols(bpdu.ConfigurationBPDUs)
+            (bpdu_pkt,) = pkt.get_protocols(bpdu.ConfigurationBPDUs)
             if bpdu_pkt.message_age > bpdu_pkt.max_age:
                 log_msg = 'Drop BPDU packet which message_age exceeded.'
                 self.logger.debug(log_msg, extra=self.dpid_str)
@@ -865,10 +862,10 @@ class Port(object):
         if new_state is not PORT_STATE_DISABLE:
             self.ofctl.set_port_status(self.ofport, new_state)
 
-        if(new_state is PORT_STATE_FORWARD
-           or (self.state is PORT_STATE_FORWARD
-               and (new_state is PORT_STATE_DISABLE
-                    or new_state is PORT_STATE_BLOCK))):
+        if (new_state is PORT_STATE_FORWARD
+                or (self.state is PORT_STATE_FORWARD
+                    and (new_state is PORT_STATE_DISABLE
+                         or new_state is PORT_STATE_BLOCK))):
             self.topology_change_notify(new_state)
 
         if (new_state is PORT_STATE_DISABLE
@@ -1022,7 +1019,7 @@ class Port(object):
         """ Set send_tc_flg to send Topology Change BPDU. """
         if not self.send_tc_flg:
             timer = datetime.timedelta(seconds=self.port_times.max_age
-                                       + self.port_times.forward_delay)
+                                               + self.port_times.forward_delay)
             self.send_tc_timer = datetime.datetime.today() + timer
             self.send_tc_flg = True
 

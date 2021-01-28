@@ -202,14 +202,41 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     network.remove_edge(dpid, k)
                     network.remove_edge(k, dpid)
 
-                    # self.write_to_txt(str(dpid),' --> ',str(port))
-
         return network
 
     def write_to_txt(self,content):
         with open('aa.txt','a') as f:
             f.write(content)
             f.write('\n')
+
+    # @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
+    # def role_reply_handler(self,ev):
+    #     msg = ev.msg
+    #     dp = msg.datapath
+    #     ofp = dp.ofproto
+    #
+    #     print(msg.generation_id)
+
+    @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
+    def role_reply_handler(self, ev):
+
+        # if ms.role == ofp.OFPCR_ROLE_NOCHANGE:
+        #     role = 'NOCHANGE'
+        # elif ms.role == ofp.OFPCR_ROLE_EQUAL:
+        #     role = 'EQUAL'
+        # elif ms.role == ofp.OFPCR_ROLE_MASTER:
+        #     role = 'MASTER'
+        # elif ms.role == ofp.OFPCR_ROLE_SLAVE:
+        #     role = 'SLAVE'
+        # else:
+        #     role = 'unknown'
+
+        print('role:',ev)
+
+    # def operate_zkServer(self,get_avai_port,dpid):
+    #     for k,v in get_avai_port[dpid].items():
+
+
 
     # def _arp_handler(self, datapath, msg, arp_pkt):
     #     '''
