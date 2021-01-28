@@ -202,7 +202,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                     network.remove_edge(dpid, k)
                     network.remove_edge(k, dpid)
 
-                    self.write_to_txt(str(dpid),' --> ',str(port))
+                    # self.write_to_txt(str(dpid),' --> ',str(port))
 
         return network
 
