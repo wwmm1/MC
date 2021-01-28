@@ -206,11 +206,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         return network
 
-    def write_to_txt(self,*content):
-        with open('aa.txt','w') as f:
-            f.write('\n')
-            for c in content:
-                f.write(c)
+    def write_to_txt(self,content):
+        with open('aa.txt','a') as f:
+            f.write(content)
             f.write('\n')
 
     # def _arp_handler(self, datapath, msg, arp_pkt):
