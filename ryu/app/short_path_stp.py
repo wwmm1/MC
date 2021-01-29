@@ -16,6 +16,7 @@ from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
 import networkx as nx
+from ryu.lib import hub
 import zookeeper_server as zks
 
 
@@ -108,6 +109,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
+
+        # self.send_role_request(datapath)
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -209,29 +212,36 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             f.write(content)
             f.write('\n')
 
+    # def send_role_request(self,datapath):
+    #     ofp = datapath.ofproto
+    #     ofp_parser = datapath.ofproto_parser
+    #
+    #     req = ofp_parser.OFPRoleRequest(datapath, ofp.OFPCR_ROLE_NOCHANGE, 0)
+    #     datapath.send_msg(req)
+
     # @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
-    # def role_reply_handler(self,ev):
+    # def role_reply_handler(self, ev):
     #     msg = ev.msg
     #     dp = msg.datapath
     #     ofp = dp.ofproto
     #
-    #     print(msg.generation_id)
-
-    @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
-    def role_reply_handler(self, ev):
-
-        # if ms.role == ofp.OFPCR_ROLE_NOCHANGE:
-        #     role = 'NOCHANGE'
-        # elif ms.role == ofp.OFPCR_ROLE_EQUAL:
-        #     role = 'EQUAL'
-        # elif ms.role == ofp.OFPCR_ROLE_MASTER:
-        #     role = 'MASTER'
-        # elif ms.role == ofp.OFPCR_ROLE_SLAVE:
-        #     role = 'SLAVE'
-        # else:
-        #     role = 'unknown'
-
-        print('role:',ev)
+    #     if msg.role == ofp.OFPCR_ROLE_NOCHANGE:
+    #         role = 'NOCHANGE'
+    #     elif msg.role == ofp.OFPCR_ROLE_EQUAL:
+    #         role = 'EQUAL'
+    #     elif msg.role == ofp.OFPCR_ROLE_MASTER:
+    #         role = 'MASTER'
+    #     elif msg.role == ofp.OFPCR_ROLE_SLAVE:
+    #         role = 'SLAVE'
+    #     else:
+    #         role = 'unknown'
+    #     #
+    #     # self.logger.debug('OFPRoleReply received: '
+    #     #                   'role=%s generation_id=%d',
+    #     #                   role, msg.generation_id)
+    #
+    #     print('role:_______________________:',role)
+    #     print('id：________________________:',msg.generation_id)
 
     # def operate_zkServer(self,get_avai_port,dpid):
     #     for k,v in get_avai_port[dpid].items():
