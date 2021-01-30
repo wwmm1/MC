@@ -38,7 +38,7 @@ class Zookeeper_Server:
     def create_zk_node(self,nodePath,nodeValue):
         #sequence:若为 True 则在你创建节点名后面增加10位数字
         #makepath：  若为 False 父节点不存在时抛 NoNodeError。若为 True 父节点不存在则创建父节点。默认 False
-        self.zk.create(nodePath,bytes(nodeValue),sequence=True,makepath=True)
+        self.zk.create(nodePath,bytes(nodeValue),sequence=False,makepath=True)
 
         # self.zk.stop()
 

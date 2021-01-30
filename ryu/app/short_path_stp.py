@@ -1,5 +1,4 @@
 # coding:utf-8
-
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
@@ -16,9 +15,9 @@ from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
 import networkx as nx
-from ryu.lib import hub
-import zookeeper_server as zks
+from zookeeper_server import Zookeeper_Server as zk
 
+import psutil
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -33,6 +32,8 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
+        self.zks = zk('127.0.0.1','4181')    #connection zk_server
+        self.sw_info = []
         # self.arp_table = {}
 
         # Sample of stplib config.
@@ -110,7 +111,12 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
 
+        # if dpid not in self.controller:
+        #     self.controller.append(dpid)
+
         # self.send_role_request(datapath)
+
+
 
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
@@ -166,10 +172,14 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         dpid = datapath.id
         # 返回删除了阻断端口链路的network
         get_avai_port = self.get_avai_port(dpid, self.network)
-        # for k,v in get_avai_port[dpid].items():
-        #     print('get_avai_port[%s]:'%dpid,get_avai_port[dpid])
-        #     print('k',k)
-        #     print('v',v)
+        for k,v in get_avai_port[dpid].items():
+            # print('get_avai_port[%s]:'%dpid,get_avai_port[dpid])
+            print('nodes:',get_avai_port.nodes())
+            print('edges:',get_avai_port.edges())
+
+        if datapath.address not in self.sw_info:
+            self.sw_info.append(datapath.address)
+            self.get_process(datapath.address)
 
         if src not in get_avai_port:
             get_avai_port.add_node(src)
@@ -212,36 +222,30 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             f.write(content)
             f.write('\n')
 
-    # def send_role_request(self,datapath):
-    #     ofp = datapath.ofproto
-    #     ofp_parser = datapath.ofproto_parser
-    #
-    #     req = ofp_parser.OFPRoleRequest(datapath, ofp.OFPCR_ROLE_NOCHANGE, 0)
-    #     datapath.send_msg(req)
+    def get_process(self,switch_address_port):
+        switch_ip, switch_port = switch_address_port   #get switch ip and port
+        # print('switch:',switch_ip)
+        # print('port:',switch_port)
+        #get local_host all process
+        all_process = psutil.net_connections()
+        for x in all_process:
+            if str(x.status) == 'ESTABLISHED':
+                if x.raddr.ip == switch_ip and x.raddr.port == switch_port:
+                    controller_ip_port = str(x.laddr.ip) + '_' + str(x.laddr.port)
+                    self.operate_zkServer(controller_ip_port,switch_address_port)
 
-    # @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
-    # def role_reply_handler(self, ev):
-    #     msg = ev.msg
-    #     dp = msg.datapath
-    #     ofp = dp.ofproto
-    #
-    #     if msg.role == ofp.OFPCR_ROLE_NOCHANGE:
-    #         role = 'NOCHANGE'
-    #     elif msg.role == ofp.OFPCR_ROLE_EQUAL:
-    #         role = 'EQUAL'
-    #     elif msg.role == ofp.OFPCR_ROLE_MASTER:
-    #         role = 'MASTER'
-    #     elif msg.role == ofp.OFPCR_ROLE_SLAVE:
-    #         role = 'SLAVE'
-    #     else:
-    #         role = 'unknown'
-    #     #
-    #     # self.logger.debug('OFPRoleReply received: '
-    #     #                   'role=%s generation_id=%d',
-    #     #                   role, msg.generation_id)
-    #
-    #     print('role:_______________________:',role)
-    #     print('id：________________________:',msg.generation_id)
+
+    def operate_zkServer(self,controller_ip_port,switch_address_port):
+        switch_ip, switch_port = switch_address_port  # get switch ip and port
+        #jude root nodes
+        if not self.zks.jude_node_exists(controller_ip_port):
+            self.zks.create_zk_node(controller_ip_port,'')
+            self.zks.create_zk_node(controller_ip_port + '/' + switch_ip + '_' + str(switch_port), '1111')
+        elif self.zks.jude_node_exists(controller_ip_port):
+            if not self.zks.jude_node_exists(controller_ip_port + '/' + switch_ip + '_' + str(switch_port)):
+                self.zks.create_zk_node(controller_ip_port + '/' + switch_ip + '_' + str(switch_port), '1111')
+
+
 
     # def operate_zkServer(self,get_avai_port,dpid):
     #     for k,v in get_avai_port[dpid].items():
