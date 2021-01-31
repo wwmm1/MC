@@ -19,6 +19,7 @@ from zookeeper_server import Zookeeper_Server as zk
 
 import psutil
 
+
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _CONTEXTS = {'stplib': stplib.Stp}
@@ -32,8 +33,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
-        self.zks = zk('127.0.0.1','4181')    #connection zk_server
+        self.zks = zk('127.0.0.1', '4181')  # connection zk_server
         self.sw_info = []
+        self.controller = []
         # self.arp_table = {}
 
         # Sample of stplib config.
@@ -116,8 +118,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         # self.send_role_request(datapath)
 
-
-
     @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
     def _topology_change_handler(self, ev):
         dp = ev.dp
@@ -167,25 +167,25 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         首先根据转发端口删除network里不能转发数据的链路,使用self.get_avai_port(dpid,self.network)方法.
         self.port_forward-->{dpid:[port]}
         #self.get_avai_port()返回删除了与阻断端口相连的链路的network
-       self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
+        self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
         '''
         dpid = datapath.id
         # 返回删除了阻断端口链路的network
+
+        if src not in self.network:
+            self.network.add_node(src)
+            self.network.add_edge(dpid, src, attr_dict={'port': in_port})
+            self.network.add_edge(src, dpid)
+            self.paths.setdefault(src, {})
+
         get_avai_port = self.get_avai_port(dpid, self.network)
-        for k,v in get_avai_port[dpid].items():
-            # print('get_avai_port[%s]:'%dpid,get_avai_port[dpid])
-            print('nodes:',get_avai_port.nodes())
-            print('edges:',get_avai_port.edges())
 
         if datapath.address not in self.sw_info:
             self.sw_info.append(datapath.address)
-            self.get_process(datapath.address)
+            self.get_process(dpid, get_avai_port[dpid], get_avai_port.nodes,
+                             get_avai_port.edges, datapath.address)
 
-        if src not in get_avai_port:
-            get_avai_port.add_node(src)
-            get_avai_port.add_edge(dpid, src, attr_dict={'port': in_port})
-            get_avai_port.add_edge(src, dpid)
-            self.paths.setdefault(src, {})
+        self.all_topology(self.controller)
 
         if dst in get_avai_port:
             if dst not in self.paths[src]:
@@ -217,40 +217,73 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         return network
 
-    def write_to_txt(self,content):
-        with open('aa.txt','a') as f:
+    def write_to_txt(self, content):
+        with open('aa.txt', 'a') as f:
             f.write(content)
             f.write('\n')
 
-    def get_process(self,switch_address_port):
-        switch_ip, switch_port = switch_address_port   #get switch ip and port
+    def get_process(self, dpid, link, nodes, edges, switch_address_port):
+        switch_ip, switch_port = switch_address_port  # get switch ip and port
         # print('switch:',switch_ip)
         # print('port:',switch_port)
-        #get local_host all process
+        # get local_host all process
         all_process = psutil.net_connections()
         for x in all_process:
             if str(x.status) == 'ESTABLISHED':
                 if x.raddr.ip == switch_ip and x.raddr.port == switch_port:
                     controller_ip_port = str(x.laddr.ip) + '_' + str(x.laddr.port)
-                    self.operate_zkServer(controller_ip_port,switch_address_port)
+                    self.operate_zkServer(dpid, link, nodes, edges, controller_ip_port)
+                    if controller_ip_port not in self.controller:
+                        self.controller.append(controller_ip_port)
 
-
-    def operate_zkServer(self,controller_ip_port,switch_address_port):
-        switch_ip, switch_port = switch_address_port  # get switch ip and port
-        #jude root nodes
+    def operate_zkServer(self, dpid, link, nodes, edges, controller_ip_port):
+        # switch_ip, switch_port = switch_address_port  # get switch ip and port
+        # jude root nodes
         if not self.zks.jude_node_exists(controller_ip_port):
-            self.zks.create_zk_node(controller_ip_port,'')
-            self.zks.create_zk_node(controller_ip_port + '/' + switch_ip + '_' + str(switch_port), '1111')
+            self.zks.create_zk_node(controller_ip_port + '/', '')
+            self.zks.create_zk_node(controller_ip_port + '/' + str(dpid), '')
+            if len(link) != 0:
+                for i, l in enumerate(link.items()):
+                    self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+            if len(nodes) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'nodes', nodes)
+            if len(edges) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'edges', edges)
         elif self.zks.jude_node_exists(controller_ip_port):
-            if not self.zks.jude_node_exists(controller_ip_port + '/' + switch_ip + '_' + str(switch_port)):
-                self.zks.create_zk_node(controller_ip_port + '/' + switch_ip + '_' + str(switch_port), '1111')
+            if not self.zks.jude_node_exists(controller_ip_port + '/' + str(dpid)):
+                self.zks.create_zk_node(controller_ip_port + '/' + str(dpid), '')
+                if len(link) != 0:
+                    for i, l in enumerate(link.items()):
+                        self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+            else:
+                if len(link) != 0:
+                    for i, l in enumerate(link.items()):
+                        self.zks.set_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+            if not self.zks.jude_node_exists(controller_ip_port + '/' + 'nodes') and len(nodes) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
+            elif len(nodes) != 0:
+                self.zks.set_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
+            if not self.zks.jude_node_exists(controller_ip_port + '/' + 'edges') and len(edges) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'edges', bytes(edges))
+            elif len(edges) != 0:
+                self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edges))
 
+    def all_topology(self, controller_info):
+        # get zkServer saved controller nodes and edges
+        all_topo = nx.DiGraph()
+        for controller in controller_info:
+            if self.zks.jude_node_exists(controller):
+                get_controller_nodes = self.zks.get_zk_node(controller + '/' + 'nodes')
+                get_controller_edges = self.zks.get_zk_node(controller + '/' + 'edges')
+                # all_topo.add_nodes_from(list(get_controller_nodes[1])[0])
+                # all_topo.add_edges_from(list(get_controller_edges[1])[0])
+                print(list(get_controller_edges[1])[0])
+                # print(list(get_controller_nodes[1])[0])
 
+        # print('all_topo:', all_topo)
 
     # def operate_zkServer(self,get_avai_port,dpid):
     #     for k,v in get_avai_port[dpid].items():
-
-
 
     # def _arp_handler(self, datapath, msg, arp_pkt):
     #     '''
