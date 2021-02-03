@@ -180,6 +180,9 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         get_avai_port = self.get_avai_port(dpid, self.network)
 
+        for k, v in get_avai_port[dpid].items():
+            print('dddd:', (dpid, k, v))
+
         if datapath.address not in self.sw_info:
             self.sw_info.append(datapath.address)
             self.get_process(dpid, get_avai_port[dpid], get_avai_port.nodes,
@@ -252,11 +255,13 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             if len(nodes) != 0:
                 self.zks.create_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
             if len(edges) != 0:
+                edgg = []
                 self.zks.create_zk_node(controller_ip_port + '/' + 'edges', '')
                 for node, port in nx.get_edge_attributes(edges, 'attr_dict').items():
                     n1, n2 = node
                     edge = (n1, n2, {'attr_dict': port})
-                    self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edge))
+                    edgg.append(edge)
+                self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edgg))
         elif self.zks.jude_node_exists(controller_ip_port):
             if not self.zks.jude_node_exists(controller_ip_port + '/' + str(dpid)):
                 self.zks.create_zk_node(controller_ip_port + '/' + str(dpid), '')
@@ -272,15 +277,19 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             elif len(nodes) != 0:
                 self.zks.set_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
             if not self.zks.jude_node_exists(controller_ip_port + '/' + 'edges') and len(edges) != 0:
+                edgg = []
                 for node, port in nx.get_edge_attributes(edges, 'attr_dict').items():
                     n1, n2 = node
                     edge = (n1, n2, {'attr_dict': port})
-                    self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edge))
+                    edgg.append(edge)
+                self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edgg))
             elif len(edges) != 0:
+                edgg = []
                 for node, port in nx.get_edge_attributes(edges, 'attr_dict').items():
                     n1, n2 = node
                     edge = (n1, n2, {'attr_dict': port})
-                    self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edge))
+                    edgg.append(edge)
+                self.zks.set_zk_node(controller_ip_port + '/' + 'edges', bytes(edgg))
 
     def all_topology(self, controller_info):
         # get zkServer saved controller nodes and edges
