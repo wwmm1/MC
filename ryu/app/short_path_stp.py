@@ -15,6 +15,7 @@ from ryu.lib.packet import ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
 import networkx as nx
+from ast import literal_eval
 from zookeeper_server import Zookeeper_Server as zk
 
 import psutil
@@ -170,7 +171,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
         '''
         dpid = datapath.id
-        # 返回删除了阻断端口链路的network
+
 
         if src not in self.network:
             self.network.add_node(src)
@@ -178,10 +179,11 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.network.add_edge(src, dpid)
             self.paths.setdefault(src, {})
 
+        # 返回删除了阻断端口链路的network
         get_avai_port = self.get_avai_port(dpid, self.network)
 
-        for k, v in get_avai_port[dpid].items():
-            print('dddd:', (dpid, k, v))
+        # for k, v in get_avai_port[dpid].items():
+        #     print('dddd:', (dpid, k, v))
 
         if datapath.address not in self.sw_info:
             self.sw_info.append(datapath.address)
@@ -192,21 +194,39 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         #     n1, n2 = node
         #     print('edges:', (n1, n2, {'attr_dict': port}))
 
-        self.all_topology(self.controller)
+        all_network = self.all_topology(self.controller)
 
-        if dst in get_avai_port:
+        print('dst:',dst)
+        print('src:',src)
+        if dst in all_network:
+            print('paths[src]:',self.paths)
             if dst not in self.paths[src]:
-                path = nx.shortest_path(get_avai_port, src, dst)
+                path = nx.shortest_path(all_network, src, dst)
                 self.paths[src][dst] = path
 
             path = self.paths[src][dst]
+            print('path:',path)
             next_hop = path[path.index(dpid) + 1]
-            out_port = get_avai_port[dpid][next_hop]['attr_dict']['port']
+            out_port = all_network[dpid][next_hop]['attr_dict']['port']
             # print('path:',path)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
         # print("out_port:",out_port)
         return out_port
+
+        # if dst in get_avai_port:
+        #     if dst not in self.paths[src]:
+        #         path = nx.shortest_path(get_avai_port, src, dst)
+        #         self.paths[src][dst] = path
+        #
+        #     path = self.paths[src][dst]
+        #     next_hop = path[path.index(dpid) + 1]
+        #     out_port = get_avai_port[dpid][next_hop]['attr_dict']['port']
+        #     # print('path:',path)
+        # else:
+        #     out_port = datapath.ofproto.OFPP_FLOOD
+        # # print("out_port:",out_port)
+        # return out_port
 
     def get_avai_port(self, dpid, network):
         '''
@@ -251,7 +271,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             self.zks.create_zk_node(controller_ip_port + '/' + str(dpid), '')
             if len(link) != 0:
                 for i, l in enumerate(link.items()):
-                    self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+                    self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), bytes(l))
             if len(nodes) != 0:
                 self.zks.create_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
             if len(edges) != 0:
@@ -267,11 +287,11 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                 self.zks.create_zk_node(controller_ip_port + '/' + str(dpid), '')
                 if len(link) != 0:
                     for i, l in enumerate(link.items()):
-                        self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+                        self.zks.create_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), bytes(l))
             else:
                 if len(link) != 0:
                     for i, l in enumerate(link.items()):
-                        self.zks.set_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), l)
+                        self.zks.set_zk_node(controller_ip_port + '/' + str(dpid) + '/' + str(i), bytes(l))
             if not self.zks.jude_node_exists(controller_ip_port + '/' + 'nodes') and len(nodes) != 0:
                 self.zks.create_zk_node(controller_ip_port + '/' + 'nodes', bytes(nodes))
             elif len(nodes) != 0:
@@ -294,15 +314,33 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     def all_topology(self, controller_info):
         # get zkServer saved controller nodes and edges
         all_topo = nx.DiGraph()
-        for controller in controller_info:
-            if self.zks.jude_node_exists(controller):
-                get_controller_nodes = self.zks.get_zk_node(controller + '/' + 'nodes')
-                get_controller_edges = self.zks.get_zk_node(controller + '/' + 'edges')
-                # all_topo.add_nodes_from(list(get_controller_nodes[1])[0])
-                # all_topo.add_edges_from(list(get_controller_edges[1])[0])
-                # for topo in list(get_controller_edges[1])[0]:
-                #     all_topo.add_edges_from(topo)
+        get_root_node = self.zks.get_zk_node('/')
+        # print('root:',(get_root_node[0])[1:])
+        if len(get_root_node) != 0:
+            for controller in (get_root_node[0])[1:]:
+                if self.zks.jude_node_exists(str(controller)):
+                    get_controller_nodes = self.zks.get_zk_node(str(controller) + '/' + 'nodes')
+                    get_controller_edges = self.zks.get_zk_node(str(controller) + '/' + 'edges')
+                    all_topo.add_nodes_from(list(get_controller_nodes[1])[0])
+                    for nodes in get_controller_nodes[1][:-1]:
+                        for node in literal_eval(nodes):
+                            if not all_topo.has_node(node):
+                                all_topo.add_node(node)
+                    for edges in get_controller_edges[1][:-1]:
+                        for edge in literal_eval(edges):
+                            # print('edge:',[edge])
+                            # print('type:',type(edge))
+                            all_topo.add_edges_from([edge])
 
+
+
+        return all_topo
+
+
+        # print('edges:',all_topo.edges())
+        # print('nodes:',all_topo.nodes())
+
+                # print('controller:',str(controller))
                 # print(list(get_controller_edges[1])[0])
                 # print(list(get_controller_nodes[1])[0])
 
