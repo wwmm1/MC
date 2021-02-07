@@ -34,7 +34,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.topology_api_app = self
         self.network = nx.DiGraph()
         self.paths = {}
-        self.zks = zk('127.0.0.1', '4181')  # connection zk_server
+        self.zks = zk('127.0.0.1', '2181')  # connection zk_server
         self.sw_info = []
         self.controller = []
         # self.arp_table = {}
