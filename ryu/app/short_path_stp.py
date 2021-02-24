@@ -37,7 +37,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.network = nx.DiGraph()
 
         self.paths = {}
-        self.zks = zk('127.0.0.1', '2181')  # connection zk_server
+        self.zks = zk('127.0.0.1', '4181')  # connection zk_server
         self.sw_info = []
         self.controller = []
         # self.arp_table = {}
@@ -75,14 +75,13 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
-        # arp_pkt = pkt.get_protocol(arp.arp)
-        # ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
+        arp_pkt = pkt.get_protocol(arp.arp)
+        ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         # icmp_pkt = pkt.get_protocol(icmp.icmp)
-
+        #
         # self.arp_table.setdefault(dpid, {})
+        #
 
-        # if arp_pkt != None:
-        #     self._arp_handler(datapath, msg, arp_pkt)
         # if icmp_pkt != None:
         #     self._icmp_handler(msg, icmp_pkt)
 
@@ -93,9 +92,22 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         dst = eth.dst
         src = eth.src
 
+        # actions = []
+
+        if arp_pkt != None:
+            src_ip = arp_pkt.src_ip
+            dst_ip = arp_pkt.dst_ip
+            if src_ip == '192.168.1.1' and dst_ip == '192.168.1.2':
+                if dpid == 2:
+                    #match需要从链路层往上依次添加匹配条件
+                    match = parser.OFPMatch(in_port=in_port, eth_type=ether_types.ETH_TYPE_IP,
+                                            ipv4_src=src_ip, ipv4_dst=dst_ip, ip_proto=6, tcp_dst=445)
+                    actions = []
+                    self.add_flow(datapath, 11111, match, actions)
+
         self.mac_to_port.setdefault(dpid, {})
 
-        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+        # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # learn a mac address to avoid FLOOD next time. mac_to_port saved all forward_port
         self.mac_to_port[dpid][src] = in_port
@@ -168,7 +180,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         #self.get_avai_port()返回删除了与阻断端口相连的链路的network
         self.get_avai_port(dpid,self.network) return network --> {dpid:[port1,port2,port3...]}
         '''
-        print('network.edges',self.network.edges)
+        # print('network.edges',self.network.edges)
         dpid = datapath.id
         # 返回删除了阻断端口链路的network
         get_avai_topo = self.get_avai_port(dpid, self.network)
@@ -194,7 +206,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                 if '00:00:00:00:00:02' not in self.paths:
                     self.paths['00:00:00:00:00:02'] = {}
 
-        print('get_network.edges:',get_avai_topo.edges)
+        # print('get_network.edges:',get_avai_topo.edges)
 
         self.add_another_edge(dpid, in_port, get_avai_topo)
 
@@ -212,7 +224,7 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         if not all_network.has_edge(16, 6):
             all_network.add_edge(16, 6, attr_dict={'port': 3})
 
-        print('all_network.edges:', all_network.edges())
+        # print('all_network.edges:', all_network.edges())
         if dst in all_network:
             if dst not in self.paths[src]:
                 # print('0000000000000000000000000000000000000000000000000000000')
