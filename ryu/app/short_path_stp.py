@@ -9,7 +9,8 @@ from ryu.lib import stplib
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import arp
-from ryu.lib.packet import icmp, ipv4
+from ryu.lib.packet import icmp, ipv4, tcp
+from ryu.lib import snortlib
 from ryu.app import simple_switch_13
 from ryu.lib.packet import ether_types
 from ryu.topology import event
@@ -18,17 +19,20 @@ import networkx as nx
 from ast import literal_eval
 from zookeeper_server import Zookeeper_Server as zk
 
+import array
 import psutil
 
 
 class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {'stplib': stplib.Stp}
+    _CONTEXTS = {'stplib': stplib.Stp,
+                 'snortlib':snortlib.SnortLib}
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.stp = kwargs['stplib']
+        self.snort = kwargs['snortlib']
         self.port_forwarded = {}
         self.all_port_forwarded = {}
         # self.port_block = {}
@@ -40,6 +44,15 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         self.zks = zk('127.0.0.1', '4181')  # connection zk_server
         self.sw_info = []
         self.controller = []
+
+        socket_config = {'unixsock': True}
+
+        self.snort_port = 3
+        self.snort.set_config(socket_config)
+        self.snort.start_socket_server()
+        self.snort_tcp_src_port = {}
+        self.snort_tcp_dst_port = {}
+        self.snort_block = {}
         # self.arp_table = {}
 
         # Sample of stplib config.
@@ -92,18 +105,48 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         dst = eth.dst
         src = eth.src
 
-        # actions = []
+        #snort block 445 port
+        self.get_snort_block_info()
 
-        if arp_pkt != None:
-            src_ip = arp_pkt.src_ip
-            dst_ip = arp_pkt.dst_ip
-            if src_ip == '192.168.1.1' and dst_ip == '192.168.1.2':
-                if dpid == 2:
-                    #match需要从链路层往上依次添加匹配条件
-                    match = parser.OFPMatch(in_port=in_port, eth_type=ether_types.ETH_TYPE_IP,
-                                            ipv4_src=src_ip, ipv4_dst=dst_ip, ip_proto=6, tcp_dst=445)
-                    actions = []
-                    self.add_flow(datapath, 11111, match, actions)
+        if len(self.snort_block) != 0:
+            for ip, port in self.snort_block.items():
+                actions = []
+                # match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP,
+                #                         ip_proto=6, tcp_dst=port)
+                match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP,
+                                        ip_proto=6, tcp_dst=port[0])
+
+                self.add_flow(datapath, 11111, match, actions)
+
+        # if len(self.snort_tcp_src_port) != 0:
+        #     for port in self.snort_tcp_src_port:
+        #         # if dpid == 2:
+        #         actions = []
+        #         match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP,
+        #                                 ip_proto=6, tcp_dst=port)
+        #         self.add_flow(datapath, 11111, match, actions)
+        #         print('port', port)
+        # if len(self.snort_tcp_dst_port) != 0:
+        #     for port in self.snort_tcp_dst_port:
+        #         # if dpid == 2:
+        #         actions = []
+        #         match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP,
+        #                                 ip_proto=6, tcp_dst=port)
+        #         self.add_flow(datapath, 11111, match, actions)
+        #         print('port', port)
+
+        #firewall part
+        # if arp_pkt != None:
+        #     src_ip = arp_pkt.src_ip
+        #     dst_ip = arp_pkt.dst_ip
+        #     if src_ip == '192.168.1.1' and dst_ip == '192.168.1.2':
+        #         if dpid == 2:
+        #             actions = []
+        #             #match需要从链路层往上依次添加匹配条件
+        #             match = parser.OFPMatch(in_port=in_port, eth_type=ether_types.ETH_TYPE_IP,
+        #                                     ipv4_src=src_ip, ipv4_dst=dst_ip, ip_proto=6, tcp_dst=445)
+        #             actions = []
+        #             self.add_flow(datapath, 11111, match, actions)
 
         self.mac_to_port.setdefault(dpid, {})
 
@@ -172,6 +215,34 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
         links = [(link.dst.dpid, link.src.dpid, {'attr_dict': {'port': link.dst.port_no}})
                  for link in link_list]
         self.network.add_edges_from(links)
+
+    def packet_print(self, pkt):
+        pkt = packet.Packet(array.array('B', pkt))
+
+        eth = pkt.get_protocol(ethernet.ethernet)
+        _ipv4 = pkt.get_protocol(ipv4.ipv4)
+        _icmp = pkt.get_protocol(icmp.icmp)
+        _tcp = pkt.get_protocol(tcp.tcp)
+
+        if _tcp:
+            if _tcp.src_port == 445:
+                if _ipv4.src != '':
+                    self.snort_tcp_src_port.setdefault(_ipv4.src, [])
+                    if _tcp.src_port not in self.snort_tcp_src_port[_ipv4.src]:
+                        self.snort_tcp_src_port[_ipv4.src].append(_tcp.src_port)
+            if _tcp.dst_port == 445:
+                if _ipv4.dst != '':
+                    self.snort_tcp_dst_port.setdefault(_ipv4.dst, [])
+                    if _tcp.dst_port not in self.snort_tcp_dst_port[_ipv4.dst]:
+                        self.snort_tcp_dst_port[_ipv4.dst].append(_tcp.dst_port)
+
+    @set_ev_cls(snortlib.EventAlert, MAIN_DISPATCHER)
+    def _dump_alert(self, ev):
+        msg = ev.msg
+
+        print('alertmsg: %s' % ''.join(msg.alertmsg))
+
+        self.packet_print(msg.pkt)
 
     def get_out_port(self, datapath, src, dst, in_port):
         '''
@@ -303,6 +374,12 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
             if len(self.port_forwarded) != 0:
                 self.zks.create_zk_node(controller_ip_port + '/' + 'port_forward',
                                         bytes(self.port_forwarded))
+            if len(self.snort_tcp_src_port) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'snort_block',
+                                        bytes(self.snort_tcp_src_port))
+            elif len(self.snort_tcp_dst_port) != 0:
+                self.zks.create_zk_node(controller_ip_port + '/' + 'snort_block',
+                                        bytes(self.snort_tcp_dst_port))
         if self.zks.jude_node_exists(controller_ip_port):
             if self.zks.jude_node_exists(controller_ip_port + '/' + 'nodes'):
                 get_nodes = self.zks.get_zk_node(controller_ip_port + '/' + 'nodes')
@@ -345,6 +422,20 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                 if len(self.port_forwarded) != 0:
                     self.zks.set_zk_node(controller_ip_port + '/' + 'port_forward',
                                          bytes(self.port_forwarded))
+            if not self.zks.jude_node_exists(controller_ip_port + '/' + 'snort_block'):
+                if len(self.snort_tcp_src_port) != 0:
+                    self.zks.create_zk_node(controller_ip_port + '/' + 'snort_block',
+                                            bytes(self.snort_tcp_src_port))
+                elif len(self.snort_tcp_dst_port) != 0:
+                    self.zks.create_zk_node(controller_ip_port + '/' + 'snort_block',
+                                            bytes(self.snort_tcp_dst_port))
+            if self.zks.jude_node_exists(controller_ip_port + '/' + 'snort_block'):
+                if len(self.snort_tcp_src_port) != 0:
+                    self.zks.set_zk_node(controller_ip_port + '/' + 'snort_block',
+                                         bytes(self.snort_tcp_src_port))
+                elif len(self.snort_tcp_dst_port) != 0:
+                    self.zks.set_zk_node(controller_ip_port + '/' + 'snort_block',
+                                         bytes(self.snort_tcp_dst_port))
 
     def all_topology(self, controller_info):
         all_topo = nx.DiGraph()
@@ -363,6 +454,31 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
                             all_topo.add_edges_from([edges])
 
         return all_topo
+
+    def get_snort_block_info(self):
+        get_root_node = self.zks.get_zk_node('/')
+        if len(get_root_node) != 0:
+            for controller in (get_root_node[0])[1:]:
+                if self.zks.jude_node_exists(str(controller)):
+                    if self.zks.jude_node_exists(str(controller) + '/' + 'snort_block'):
+                        get_snort_block = self.zks.get_zk_node(str(controller) + '/' + 'snort_block')
+                        # print('true',self.jude_dict(literal_eval(get_snort_block[1][0]), self.snort_block))
+                        # print('aaa',literal_eval(get_snort_block[1][0]))
+                        if len(self.snort_block) != 0 \
+                                and not self.jude_dict(literal_eval(get_snort_block[1][0]), self.snort_block):
+                            # print('1111111111111111111111111111111111111111111111111111111111111111')
+                            self.snort_block.update(literal_eval(get_snort_block[1][0]))
+                        if len(self.snort_block) == 0:
+                            self.snort_block.update(literal_eval(get_snort_block[1][0]))
+
+    def jude_dict(self, dict1, dict2):
+        for i, j in dict1.items():
+            if i in dict2.keys():
+                if j == dict2[i]:
+                    # dict1 in dict2
+                    return True
+
+        return False
 
     # def all_forward_port(self, dpid, network):
     #     # get zkServer saved controller nodes and edges
@@ -397,13 +513,6 @@ class SimpleSwitch13(simple_switch_13.SimpleSwitch13):
     #
     #     return network
     #
-    # def jude_port_dict(self, dict1, dict2):
-    #     for i, j in dict1.items():
-    #         if i in dict2.keys():
-    #             if j == dict2[i]:
-    #                 return True
-    #
-    #     return False
 
 # def operate_zkServer(self,get_avai_port,dpid):
 #     for k,v in get_avai_port[dpid].items():
